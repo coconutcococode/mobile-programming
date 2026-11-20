@@ -43,6 +43,10 @@ class RouteCandidatesViewModel @Inject constructor(
     private val _sort = MutableStateFlow(RouteSortType.FASTEST) // 기본 정렬: 최소 시간
     val sort: StateFlow<RouteSortType> = _sort.asStateFlow()
 
+    /** 출발지 표시: 위치를 받았으면 '현재 위치', 못 받아 기본 지역으로 검색했으면 '서울시청'. */
+    private val _originLabel = MutableStateFlow(ORIGIN_CURRENT_LOCATION)
+    val originLabel: StateFlow<String> = _originLabel.asStateFlow()
+
     private val candidates = MutableStateFlow<UiState<List<RouteCandidate>>>(UiState.Loading)
 
     val uiState: StateFlow<UiState<List<RouteCandidate>>> =
@@ -58,7 +62,9 @@ class RouteCandidatesViewModel @Inject constructor(
         viewModelScope.launch {
             candidates.value = UiState.Loading
             // TODO(트랙 A): 위치 권한 흐름(S-01-D1 → 거절 시 S-08-P1). 지금은 권한이 없으면 서울시청 기준.
-            val origin = locationTracker.currentLocation() ?: LatLng.SeoulCityHall
+            val currentLocation = locationTracker.currentLocation()
+            val origin = currentLocation ?: LatLng.SeoulCityHall
+            _originLabel.value = if (currentLocation != null) ORIGIN_CURRENT_LOCATION else ORIGIN_FALLBACK
             val destination = placeRepository.getPlace(args.destinationPlaceId).getOrElse {
                 candidates.value = UiState.Error(it.toAppError())
                 return@launch
@@ -74,5 +80,10 @@ class RouteCandidatesViewModel @Inject constructor(
 
     fun onSortChange(type: RouteSortType) {
         _sort.value = type
+    }
+
+    private companion object {
+        const val ORIGIN_CURRENT_LOCATION = "현재 위치"
+        const val ORIGIN_FALLBACK = "서울시청"
     }
 }

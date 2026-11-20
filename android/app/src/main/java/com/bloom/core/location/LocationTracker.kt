@@ -78,6 +78,7 @@ class FusedLocationTracker @Inject constructor(
                 }
             }
             client.requestLocationUpdates(request, callback, Looper.getMainLooper())
+                .addOnFailureListener { close(it) } // 등록 실패를 수집하는 쪽에 전달(정리는 awaitClose 에서)
             awaitClose { client.removeLocationUpdates(callback) }
         }
     }

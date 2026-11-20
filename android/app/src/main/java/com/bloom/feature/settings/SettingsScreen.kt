@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -17,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -103,12 +105,21 @@ private fun SectionTitle(text: String) {
     Text(text, style = MaterialTheme.typography.labelMedium, color = BloomTheme.colors.textSecondary, modifier = Modifier.padding(top = 8.dp))
 }
 
-/** 토글 옆에 '켬/끔' 글자를 함께 둔다(6.4 색 외 구분 수단). */
+/**
+ * 토글 옆에 '켬/끔' 글자를 함께 둔다(6.4 색 외 구분 수단).
+ * 행 전체를 하나의 스위치로 묶어 TalkBack 이 설정 이름과 상태를 함께 읽게 한다.
+ */
 @Composable
 private fun SwitchRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 50.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 50.dp)
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
         Text(if (checked) "켬" else "끔", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(end = 8.dp))
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(checked = checked, onCheckedChange = null) // 상태 변경은 행에서 한 번만 처리
     }
 }

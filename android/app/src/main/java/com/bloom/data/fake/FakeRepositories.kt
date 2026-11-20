@@ -89,7 +89,7 @@ class FakeRouteRepository @Inject constructor() : RouteRepository {
                 ),
             ),
             candidate(
-                21, 1, 560,
+                21, 0, 560,
                 listOf(
                     walk(3, "신촌오거리", 200),
                     Segment(TransitMode.BUS, 12, "7612", "신촌오거리", "서교동", stopCount = 5),

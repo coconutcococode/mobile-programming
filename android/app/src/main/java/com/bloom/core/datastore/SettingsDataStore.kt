@@ -3,10 +3,13 @@ package com.bloom.core.datastore
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -26,7 +29,10 @@ class SettingsDataStore @Inject constructor(
 ) {
     private val store = context.settingsDataStore
 
-    val settings: Flow<AppSettings> = store.data.map { prefs ->
+    val settings: Flow<AppSettings> = store.data
+        // 파일 읽기 실패 시 흐름이 죽지 않도록 빈 설정(=기본값)으로 이어 간다.
+        .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
+        .map { prefs ->
         AppSettings(
             darkMode = prefs[Keys.DARK_MODE],
             alightVibration = prefs[Keys.ALIGHT_VIBRATION] ?: true,

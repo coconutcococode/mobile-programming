@@ -56,8 +56,10 @@ fun RouteCandidatesScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val sort by viewModel.sort.collectAsStateWithLifecycle()
+    val originLabel by viewModel.originLabel.collectAsStateWithLifecycle()
 
     RouteCandidatesContent(
+        originLabel = originLabel,
         destinationName = viewModel.destinationName,
         uiState = uiState,
         sort = sort,
@@ -71,6 +73,7 @@ fun RouteCandidatesScreen(
 /** 상태만 받아 그리는 부분 — Preview·UI 테스트는 이 함수로 한다. */
 @Composable
 internal fun RouteCandidatesContent(
+    originLabel: String,
     destinationName: String,
     uiState: UiState<List<RouteCandidate>>,
     sort: RouteSortType,
@@ -84,7 +87,7 @@ internal fun RouteCandidatesContent(
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = BloomDimens.ScreenHorizontal)) {
-            Text("출발  현재 위치", style = MaterialTheme.typography.bodySmall, color = BloomTheme.colors.textSecondary)
+            Text("출발  $originLabel", style = MaterialTheme.typography.bodySmall, color = BloomTheme.colors.textSecondary)
             Text("도착  $destinationName", style = MaterialTheme.typography.titleMedium)
             Row(Modifier.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 RouteSortType.entries.forEach { type ->
@@ -175,6 +178,7 @@ private fun RouteCandidatesPreview() {
     val candidate = RouteCandidate("1", SamplePlaces.HongdaeStreet, 18, LocalTime.of(14, 20), 0, 780, listOf(walk, subway, walk))
     BloomTheme {
         RouteCandidatesContent(
+            originLabel = "현재 위치",
             destinationName = "홍대 걷고싶은거리",
             uiState = UiState.Success(listOf(candidate, candidate.copy(id = "2", totalMinutes = 21))),
             sort = RouteSortType.FASTEST,

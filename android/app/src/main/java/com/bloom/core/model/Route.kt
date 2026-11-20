@@ -35,11 +35,11 @@ enum class RouteSortType(val label: String) {
     LEAST_WALK("최소 도보"),
 }
 
-/** 정렬 3종. 동점이면 소요 시간 → 환승 순으로 비교한다(동점 규칙은 팀 확정 전 잠정). */
+/** 정렬 3종. 기준값이 같으면 나머지 두 값(시간 → 환승 → 도보 순)으로 이어서 비교한다(동점 규칙은 팀 확정 전 잠정). */
 fun List<RouteCandidate>.sortedFor(type: RouteSortType): List<RouteCandidate> = when (type) {
-    RouteSortType.FASTEST -> sortedWith(compareBy({ it.totalMinutes }, { it.transferCount }))
-    RouteSortType.FEWEST_TRANSFERS -> sortedWith(compareBy({ it.transferCount }, { it.totalMinutes }))
-    RouteSortType.LEAST_WALK -> sortedWith(compareBy({ it.walkMeters }, { it.totalMinutes }))
+    RouteSortType.FASTEST -> sortedWith(compareBy({ it.totalMinutes }, { it.transferCount }, { it.walkMeters }))
+    RouteSortType.FEWEST_TRANSFERS -> sortedWith(compareBy({ it.transferCount }, { it.totalMinutes }, { it.walkMeters }))
+    RouteSortType.LEAST_WALK -> sortedWith(compareBy({ it.walkMeters }, { it.totalMinutes }, { it.transferCount }))
 }
 
 object RouteLimits {

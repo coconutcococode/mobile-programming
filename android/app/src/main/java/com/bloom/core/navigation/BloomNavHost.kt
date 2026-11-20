@@ -20,6 +20,7 @@ import com.bloom.feature.settings.SettingsScreen
 @Composable
 fun BloomNavHost(
     navController: NavHostController,
+    onNavigateToTab: (TopLevelTab) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val toRouteCandidates: (Place) -> Unit = { place ->
@@ -40,13 +41,13 @@ fun BloomNavHost(
                 onPlaceSelected = toRouteCandidates,
                 onGuideBannerClick = toGuide,
                 onLocationPermissionDenied = { navController.navigate(LocationPermissionRoute) },
-                onLoginRequired = { navController.navigateToTab(TopLevelTab.SETTINGS) },
+                onLoginRequired = { onNavigateToTab(TopLevelTab.SETTINGS) },
             )
         }
         composable<NearbyRoute> {
             NearbyScreen(
                 onDirections = toRouteCandidates,
-                onLoginClick = { navController.navigateToTab(TopLevelTab.SETTINGS) },
+                onLoginClick = { onNavigateToTab(TopLevelTab.SETTINGS) },
             )
         }
         composable<FavoritesRoute> {
@@ -54,8 +55,8 @@ fun BloomNavHost(
                 onFavoriteClick = { favorite ->
                     navController.navigate(RouteCandidatesRoute(favorite.placeId, favorite.alias))
                 },
-                onLoginClick = { navController.navigateToTab(TopLevelTab.SETTINGS) },
-                onSearchClick = { navController.navigateToTab(TopLevelTab.HOME) },
+                onLoginClick = { onNavigateToTab(TopLevelTab.SETTINGS) },
+                onSearchClick = { onNavigateToTab(TopLevelTab.HOME) },
             )
         }
         composable<SettingsRoute> {
@@ -84,7 +85,7 @@ fun BloomNavHost(
         composable<LocationPermissionRoute> {
             LocationPermissionScreen(
                 onBack = { navController.popBackStack() },
-                onFavoritesOnly = { navController.navigateToTab(TopLevelTab.FAVORITES) },
+                onFavoritesOnly = { onNavigateToTab(TopLevelTab.FAVORITES) },
             )
         }
         composable<DataSourceRoute> {

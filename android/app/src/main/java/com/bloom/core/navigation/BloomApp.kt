@@ -31,6 +31,14 @@ fun BloomApp() {
 
     // 스택 화면(S-02 등)에 있어도 들어온 탭을 선택 상태로 유지한다.
     var currentTab by rememberSaveable { mutableStateOf(TopLevelTab.HOME) }
+
+    // 탭 이동은 반드시 이 함수로 한다. 저장된 탭 스택이 하위 화면(S-02 등)으로 복원돼도 선택 탭이 맞게 바뀐다.
+    val navigateToTab: (TopLevelTab) -> Unit = { tab ->
+        currentTab = tab
+        navController.navigateToTab(tab)
+    }
+
+    // 뒤로가기로 다른 탭의 루트 화면에 도착한 경우(예: 주변 → 홈)에도 선택 탭을 맞춘다.
     LaunchedEffect(destination) {
         TopLevelTab.entries
             .firstOrNull { tab -> destination?.hasRoute(tab.route::class) == true }
@@ -49,7 +57,7 @@ fun BloomApp() {
                         val selected = tab == currentTab
                         NavigationBarItem(
                             selected = selected,
-                            onClick = { navController.navigateToTab(tab) },
+                            onClick = { navigateToTab(tab) },
                             icon = { Icon(if (selected) tab.selectedIcon else tab.unselectedIcon, contentDescription = null) },
                             label = { Text(tab.label, style = MaterialTheme.typography.labelMedium) },
                         )
@@ -60,13 +68,14 @@ fun BloomApp() {
     ) { padding ->
         BloomNavHost(
             navController = navController,
+            onNavigateToTab = navigateToTab,
             modifier = Modifier.padding(padding).consumeWindowInsets(padding),
         )
     }
 }
 
-/** 탭 전환: 탭별 스택·스크롤 상태를 저장·복원한다. */
-fun NavController.navigateToTab(tab: TopLevelTab) {
+/** 탭 전환: 탭별 스택·스크롤 상태를 저장·복원한다. 화면 코드에서는 BloomApp 의 navigateToTab 을 쓴다. */
+private fun NavController.navigateToTab(tab: TopLevelTab) {
     navigate(tab.route) {
         popUpTo(graph.findStartDestination().id) { saveState = true }
         launchSingleTop = true

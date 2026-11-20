@@ -37,6 +37,15 @@ class RouteAndGuideTest {
     }
 
     @Test
+    fun `최소 도보에서 도보와 시간이 같으면 환승이 적은 경로가 먼저다`() {
+        val list = listOf(
+            candidate("two", minutes = 20, transfers = 2, walk = 300),
+            candidate("zero", minutes = 20, transfers = 0, walk = 300),
+        )
+        assertEquals(listOf("zero", "two"), list.sortedFor(RouteSortType.LEAST_WALK).map { it.id })
+    }
+
+    @Test
     fun `대중교통 구간은 승차대기-이동-하차대기 3단계, 마지막은 도착`() {
         val route = candidate(
             "r", 18, 0, 780,

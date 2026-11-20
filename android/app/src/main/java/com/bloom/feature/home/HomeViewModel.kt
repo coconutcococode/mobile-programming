@@ -10,6 +10,7 @@ import com.bloom.data.repository.FavoriteRepository
 import com.bloom.data.repository.GuideSessionRepository
 import com.bloom.data.repository.PlaceRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -40,14 +41,19 @@ class HomeViewModel @Inject constructor(
     private val _selectedPlace = MutableStateFlow<Place?>(null)
     val selectedPlace: StateFlow<Place?> = _selectedPlace.asStateFlow()
 
-    /** 지도 핀 탭 → S-09 시트 */
+    private var placeLookupJob: Job? = null
+
+    /** 지도 핀 탭 → S-09 시트. 이전 조회가 남아 있으면 취소해서 늦게 온 결과가 시트를 덮지 않게 한다. */
     fun onMapPlaceClick(placeId: String) {
-        viewModelScope.launch {
+        placeLookupJob?.cancel()
+        placeLookupJob = viewModelScope.launch {
             _selectedPlace.value = placeRepository.getPlace(placeId).getOrNull()
         }
     }
 
     fun dismissPlace() {
+        placeLookupJob?.cancel()
+        placeLookupJob = null
         _selectedPlace.value = null
     }
 

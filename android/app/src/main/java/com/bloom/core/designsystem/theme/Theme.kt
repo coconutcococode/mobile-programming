@@ -15,7 +15,8 @@ private val LightColorScheme = lightColorScheme(
     primaryContainer = BloomPalette.SelectedBackground,
     onPrimaryContainer = BloomPalette.Navy,
     secondary = BloomPalette.BlueMid,
-    onSecondary = BloomPalette.White,
+    // 중간 파랑 위 흰 글자는 3.2:1 로 기준 미달 → 어두운 글자(5.5:1)
+    onSecondary = BloomPalette.DarkBackground,
     secondaryContainer = BloomPalette.SkyLight,
     onSecondaryContainer = BloomPalette.TextPrimary,
     background = BloomPalette.Background,
