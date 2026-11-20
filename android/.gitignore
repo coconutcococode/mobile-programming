@@ -1,0 +1,15 @@
+*.iml
+.gradle/
+.kotlin/
+build/
+/captures
+.externalNativeBuild
+.cxx
+.idea/
+.DS_Store
+
+# 로컬 비밀값 — 커밋 금지 (노션 '환경변수' 페이지로 공유)
+local.properties
+app/google-services.json
+*.jks
+*.keystore
