@@ -28,7 +28,7 @@ fun LocationPermissionScreen(
         Text("✓ '앱 사용 중에만 허용'", style = MaterialTheme.typography.titleMedium)
         Text("✓ '정확한 위치' 켜기", style = MaterialTheme.typography.titleMedium)
         Text(
-            "권한을 켜고 돌아오면 바로 검색을 이어 가요.",
+            "권한을 켠 뒤 돌아와서 다시 검색해 주세요.",
             style = MaterialTheme.typography.bodySmall,
             color = BloomTheme.colors.textSecondary,
         )

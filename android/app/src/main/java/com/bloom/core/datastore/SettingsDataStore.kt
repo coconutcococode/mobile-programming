@@ -1,14 +1,16 @@
 package com.bloom.core.datastore
 
 import android.content.Context
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.retryWhen
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -30,21 +32,35 @@ class SettingsDataStore @Inject constructor(
     private val store = context.settingsDataStore
 
     val settings: Flow<AppSettings> = store.data
-        // 파일 읽기 실패 시 흐름이 죽지 않도록 빈 설정(=기본값)으로 이어 간다.
-        .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
+        // 파일 읽기 실패 시 기본값을 먼저 보여 주고, 잠시 뒤 다시 읽어 복구되면 실제 설정으로 바꾼다.
+        .retryWhen { e, _ ->
+            if (e !is IOException) return@retryWhen false
+            emit(emptyPreferences())
+            delay(READ_RETRY_DELAY_MILLIS)
+            true
+        }
         .map { prefs ->
-        AppSettings(
-            darkMode = prefs[Keys.DARK_MODE],
-            alightVibration = prefs[Keys.ALIGHT_VIBRATION] ?: true,
-        )
+            AppSettings(
+                darkMode = prefs[Keys.DARK_MODE],
+                alightVibration = prefs[Keys.ALIGHT_VIBRATION] ?: true,
+            )
+        }
+
+    suspend fun setDarkMode(enabled: Boolean) = write { it[Keys.DARK_MODE] = enabled }
+
+    suspend fun setAlightVibration(enabled: Boolean) = write { it[Keys.ALIGHT_VIBRATION] = enabled }
+
+    /** 저장 실패(IOException)로 앱이 꺼지지 않게 한다. 실패하면 기존 설정이 그대로 남아 토글도 원래 값으로 보인다. */
+    private suspend fun write(block: (MutablePreferences) -> Unit) {
+        try {
+            store.edit(block)
+        } catch (_: IOException) {
+            // TODO: 저장 실패 안내가 필요해지면 여기서 결과를 돌려준다.
+        }
     }
 
-    suspend fun setDarkMode(enabled: Boolean) {
-        store.edit { it[Keys.DARK_MODE] = enabled }
-    }
-
-    suspend fun setAlightVibration(enabled: Boolean) {
-        store.edit { it[Keys.ALIGHT_VIBRATION] = enabled }
+    private companion object {
+        const val READ_RETRY_DELAY_MILLIS = 1_000L
     }
 
     private object Keys {

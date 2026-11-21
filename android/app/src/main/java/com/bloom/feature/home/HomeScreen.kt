@@ -32,6 +32,7 @@ import com.bloom.core.designsystem.component.BloomTextButton
 import com.bloom.core.designsystem.component.NoticeBanner
 import com.bloom.core.designsystem.theme.BloomDimens
 import com.bloom.core.designsystem.theme.BloomTheme
+import com.bloom.core.model.Favorite
 import com.bloom.core.model.Place
 import com.bloom.data.fake.SamplePlaces
 import com.bloom.feature.place.PlaceDetailSheet
@@ -43,6 +44,7 @@ import com.bloom.feature.place.PlaceDetailSheet
 @Composable
 fun HomeScreen(
     onPlaceSelected: (Place) -> Unit,
+    onFavoriteClick: (Favorite) -> Unit,
     onGuideBannerClick: () -> Unit,
     onLocationPermissionDenied: () -> Unit,
     onLoginRequired: () -> Unit,
@@ -84,7 +86,7 @@ fun HomeScreen(
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         favorites.forEach { fav ->
                             AssistChip(
-                                onClick = { SamplePlaces.all.firstOrNull { it.id == fav.placeId }?.let(onPlaceSelected) },
+                                onClick = { onFavoriteClick(fav) },
                                 label = { Text(fav.alias) },
                                 leadingIcon = { Icon(Icons.Filled.Star, contentDescription = null) },
                             )
