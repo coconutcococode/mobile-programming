@@ -60,6 +60,17 @@ class FakePlaceRepository @Inject constructor() : PlaceRepository {
     }
 }
 
+/** 가짜 경로선 좌표용 지점(신촌·홍대 일대 대략 위치). 실제 정류장 좌표가 아님. */
+private object FakeStops {
+    val EwhaStation = LatLng(37.5567, 126.9460)
+    val SinchonStation = LatLng(37.5552, 126.9369)
+    val HongikStation = LatLng(37.5572, 126.9245)
+    val HapjeongStation = LatLng(37.5495, 126.9139)
+    val SinchonOgeori = LatLng(37.5551, 126.9368)
+    val SeogyoDong = LatLng(37.5530, 126.9215)
+    val NearbyStop = LatLng(37.5585, 126.9405)
+}
+
 @Singleton
 class FakeRouteRepository @Inject constructor() : RouteRepository {
     private var lastCandidates: List<RouteCandidate> = emptyList()
@@ -67,8 +78,11 @@ class FakeRouteRepository @Inject constructor() : RouteRepository {
     override suspend fun searchRoutes(origin: LatLng, destination: Place): Result<List<RouteCandidate>> {
         delay(FAKE_LATENCY_MILLIS)
         val now = LocalTime.now().withSecond(0).withNano(0)
-        fun walk(min: Int, to: String, meters: Int) =
-            Segment(TransitMode.WALK, min, "도보", "", to, distanceMeters = meters)
+        val end = destination.location
+
+        // 구간 좌표는 앞 구간의 마지막 점과 다음 구간의 첫 점이 이어지게 만든다.
+        fun walk(min: Int, to: String, meters: Int, from: LatLng, toPos: LatLng) =
+            Segment(TransitMode.WALK, min, "도보", "", to, distanceMeters = meters, path = listOf(from, toPos))
 
         fun candidate(total: Int, transfers: Int, walkMeters: Int, segments: List<Segment>) = RouteCandidate(
             id = UUID.randomUUID().toString(),
@@ -79,46 +93,67 @@ class FakeRouteRepository @Inject constructor() : RouteRepository {
             walkMeters = walkMeters,
             segments = segments,
         )
-        lastCandidates = listOf(
-            candidate(
-                18, 0, 780,
-                listOf(
-                    walk(6, "이대역", 380),
-                    Segment(TransitMode.SUBWAY, 6, "2호선", "이대역", "홍대입구역", stopCount = 2),
-                    walk(6, destination.name, 400),
+        with(FakeStops) {
+            lastCandidates = listOf(
+                candidate(
+                    18, 0, 780,
+                    listOf(
+                        walk(6, "이대역", 380, origin, EwhaStation),
+                        Segment(
+                            TransitMode.SUBWAY, 6, "2호선", "이대역", "홍대입구역", stopCount = 2,
+                            path = listOf(EwhaStation, SinchonStation, HongikStation),
+                        ),
+                        walk(6, destination.name, 400, HongikStation, end),
+                    ),
                 ),
-            ),
-            candidate(
-                21, 0, 560,
-                listOf(
-                    walk(3, "신촌오거리", 200),
-                    Segment(TransitMode.BUS, 12, "7612", "신촌오거리", "서교동", stopCount = 5),
-                    walk(6, destination.name, 360),
+                candidate(
+                    21, 0, 560,
+                    listOf(
+                        walk(3, "신촌오거리", 200, origin, SinchonOgeori),
+                        Segment(
+                            TransitMode.BUS, 12, "7612", "신촌오거리", "서교동", stopCount = 5,
+                            path = listOf(SinchonOgeori, LatLng(37.5545, 126.9300), SeogyoDong),
+                        ),
+                        walk(6, destination.name, 360, SeogyoDong, end),
+                    ),
                 ),
-            ),
-            candidate(
-                24, 1, 470,
-                listOf(
-                    walk(4, "이대역", 250),
-                    Segment(TransitMode.SUBWAY, 9, "2호선", "이대역", "합정역", stopCount = 3),
-                    Segment(TransitMode.BUS, 8, "7016", "합정역", "서교동", stopCount = 3),
-                    walk(3, destination.name, 220),
+                candidate(
+                    24, 1, 470,
+                    listOf(
+                        walk(4, "이대역", 250, origin, EwhaStation),
+                        Segment(
+                            TransitMode.SUBWAY, 9, "2호선", "이대역", "합정역", stopCount = 3,
+                            path = listOf(EwhaStation, SinchonStation, HongikStation, HapjeongStation),
+                        ),
+                        Segment(
+                            TransitMode.BUS, 8, "7016", "합정역", "서교동", stopCount = 3,
+                            path = listOf(HapjeongStation, LatLng(37.5510, 126.9175), SeogyoDong),
+                        ),
+                        walk(3, destination.name, 220, SeogyoDong, end),
+                    ),
                 ),
-            ),
-            candidate(
-                27, 0, 690,
-                listOf(
-                    walk(5, "정류장", 300),
-                    Segment(TransitMode.BUS, 17, "7016", "정류장", "서교동", stopCount = 9),
-                    walk(5, destination.name, 390),
+                candidate(
+                    27, 0, 690,
+                    listOf(
+                        walk(5, "정류장", 300, origin, NearbyStop),
+                        Segment(
+                            TransitMode.BUS, 17, "7016", "정류장", "서교동", stopCount = 9,
+                            path = listOf(NearbyStop, LatLng(37.5560, 126.9330), LatLng(37.5545, 126.9260), SeogyoDong),
+                        ),
+                        walk(5, destination.name, 390, SeogyoDong, end),
+                    ),
                 ),
-            ),
-        )
+            )
+        }
         return Result.success(lastCandidates)
     }
 
     override fun findCandidate(candidateId: String): RouteCandidate? =
         lastCandidates.firstOrNull { it.id == candidateId }
+
+    override fun clearCandidates() {
+        lastCandidates = emptyList()
+    }
 }
 
 @Singleton

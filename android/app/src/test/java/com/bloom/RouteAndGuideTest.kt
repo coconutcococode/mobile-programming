@@ -10,6 +10,7 @@ import com.bloom.core.model.Segment
 import com.bloom.core.model.TransitMode
 import com.bloom.core.model.sortedFor
 import com.bloom.core.model.toGuideSteps
+import com.bloom.data.fake.FakeRouteRepository
 import com.bloom.data.session.InMemoryGuideSessionRepository
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -79,7 +80,7 @@ class RouteAndGuideTest {
 
     @Test
     fun `안내 세션은 끝 단계를 넘지 않고, 종료하면 폐기된다`() {
-        val repo = InMemoryGuideSessionRepository()
+        val repo = InMemoryGuideSessionRepository(FakeRouteRepository())
         val route = candidate("r", 10, 0, 500, listOf(Segment(TransitMode.WALK, 10, "도보", "", "목적지", distanceMeters = 500)))
         repo.start(route)
         repeat(10) { repo.next() }

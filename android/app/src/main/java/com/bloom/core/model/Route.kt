@@ -7,6 +7,9 @@ enum class TransitMode { WALK, BUS, SUBWAY }
 /**
  * 경로의 한 구간.
  * @param label 막대 안 글자 — 도보는 "도보", 버스는 노선 번호("7016"), 지하철은 호선("2호선")
+ * @param path 이 구간의 경로선 좌표(카카오 응답의 구간 경로 좌표). 순서대로 이으면 구간의 선이 되고,
+ *  앞 구간의 마지막 점과 다음 구간의 첫 점이 이어진다. 지도에서는 구간마다 [mode] 별 색으로 칠한다.
+ *  경로 데이터라 안내 종료 시 함께 폐기한다(NFR-11).
  */
 data class Segment(
     val mode: TransitMode,
@@ -16,6 +19,7 @@ data class Segment(
     val endName: String,
     val stopCount: Int = 0,
     val distanceMeters: Int = 0,
+    val path: List<LatLng> = emptyList(),
 )
 
 /** 경로 후보(S-02 카드 한 장). 안내 중에는 메모리에만 보관한다(NFR-11). */

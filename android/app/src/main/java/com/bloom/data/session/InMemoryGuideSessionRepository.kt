@@ -5,6 +5,7 @@ import com.bloom.core.model.GuideSession
 import com.bloom.core.model.RouteCandidate
 import com.bloom.core.model.toGuideSteps
 import com.bloom.data.repository.GuideSessionRepository
+import com.bloom.data.repository.RouteRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,7 +15,9 @@ import javax.inject.Singleton
 
 /** 경로 데이터는 디스크에 쓰지 않고 메모리에만 둔다(NFR-07·NFR-11). */
 @Singleton
-class InMemoryGuideSessionRepository @Inject constructor() : GuideSessionRepository {
+class InMemoryGuideSessionRepository @Inject constructor(
+    private val routeRepository: RouteRepository,
+) : GuideSessionRepository {
 
     private val _session = MutableStateFlow<GuideSession?>(null)
     override val session: StateFlow<GuideSession?> = _session.asStateFlow()
@@ -40,7 +43,9 @@ class InMemoryGuideSessionRepository @Inject constructor() : GuideSessionReposit
         _session.update { it?.copy(isOffRoute = offRoute) }
     }
 
+    /** 안내 화면·알림·도착 처리 모두 여기를 거치므로, 경로 후보도 이 한 곳에서 함께 지운다. */
     override fun end() {
         _session.value = null
+        routeRepository.clearCandidates()
     }
 }
