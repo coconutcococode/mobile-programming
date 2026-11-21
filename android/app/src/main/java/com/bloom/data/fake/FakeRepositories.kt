@@ -150,6 +150,10 @@ class FakeRouteRepository @Inject constructor() : RouteRepository {
 
     override fun findCandidate(candidateId: String): RouteCandidate? =
         lastCandidates.firstOrNull { it.id == candidateId }
+
+    override fun clearCandidates() {
+        lastCandidates = emptyList()
+    }
 }
 
 @Singleton

@@ -36,6 +36,9 @@ interface RouteRepository {
 
     /** 마지막 검색 결과에서 후보 하나를 꺼낸다(메모리 보관만, NFR-11). 프로세스가 죽었으면 null. */
     fun findCandidate(candidateId: String): RouteCandidate?
+
+    /** 보관 중인 경로 후보(출발지·경로선 좌표 포함)를 메모리에서 지운다. 안내 종료 시 호출(NFR-11). */
+    fun clearCandidates()
 }
 
 interface TransitRepository {
