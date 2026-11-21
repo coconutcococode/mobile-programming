@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# 팀 흐름이 main ← develop ← 기능 브랜치라서, develop 으로 가는 PR 도 자동 리뷰한다.
+# (기본 브랜치 main 은 따로 적지 않아도 자동 리뷰 대상)
+reviews:
+  auto_review:
+    enabled: true
+    base_branches:
+      - develop
