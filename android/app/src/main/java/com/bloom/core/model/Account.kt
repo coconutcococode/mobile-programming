@@ -14,6 +14,10 @@ data class Favorite(
     val id: String,
     val placeId: String,
     val alias: String,
+    /**
+     * 재검색용 검색어. 사용자가 검색창에 직접 친 글자만 저장한다(카카오 장소 이름 저장 금지).
+     * 검색 없이 고른 장소(지도 핀·주변)는 빈 값.
+     */
     val searchKeyword: String,
     val address: String,
     val syncState: SyncState = SyncState.SYNCED,
