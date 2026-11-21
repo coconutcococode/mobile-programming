@@ -1,0 +1,6 @@
+<resources>
+    <!-- 실제 테마는 Compose(BloomTheme). 여기는 앱 시작 직후 창 배경만 맞춘다. -->
+    <style name="Theme.Bloom" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/bloom_window_background</item>
+    </style>
+</resources>
