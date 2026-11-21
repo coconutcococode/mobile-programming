@@ -19,8 +19,10 @@ import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.tasks.await
@@ -87,6 +89,8 @@ class FusedLocationTracker @Inject constructor(
                 .addOnFailureListener { close(it) } // 등록 실패를 수집하는 쪽에 전달(정리는 awaitClose 에서)
             awaitClose { client.removeLocationUpdates(callback) }
         }
+            // 기본 대기열(64건)이 차면 새 위치가 조용히 버려진다 → 제한 없이 모두 보관(위치는 몇 초에 1건이라 부담 적음).
+            .buffer(Channel.UNLIMITED)
     }
 }
 
