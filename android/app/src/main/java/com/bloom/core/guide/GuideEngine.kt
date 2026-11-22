@@ -131,7 +131,11 @@ class GuideEngine(
         return when (step.type) {
             GuideStepType.WALK -> {
                 val next = steps.getOrNull(progress.stepIndex + 1)
-                next?.type == GuideStepType.WAIT_BOARDING && next.segment?.boardingPoint() == null
+                when (next?.type) {
+                    GuideStepType.ARRIVED -> false
+                    GuideStepType.WAIT_BOARDING -> next.segment?.boardingPoint() == null
+                    else -> true // 도보 다음에 넘어갈 목표가 없는 단계가 오면(정상 단계 목록에선 없음) 수동으로
+                }
             }
             // 지하철은 승차 버튼·시간으로 넘어가므로 좌표가 없어도 된다
             GuideStepType.WAIT_BOARDING -> segment.isBus() && segment!!.boardingPoint() == null

@@ -41,7 +41,7 @@ data class GuideSession(
 
 /**
  * 경로 → 안내 단계 목록 (분석서 표 2-1).
- * - 도보 구간 1개 = '도보 이동' 1단계
+ * - 도보 구간 1개 = '도보 이동' 1단계. 도보 구간이 연달아 오면 하나로 합친다(합치지 않으면 앞 도보 단계는 넘어갈 목표가 없음)
  * - 대중교통 구간 1개 = 승차 대기 · 차량 이동 · 하차 대기 · 하차 완료 4단계
  * - 지하철 → 지하철 환승은 하차 완료 없이 "갈아타세요" 안내 후 바로 다음 열차의 승차 대기 (UC-01 A8)
  * - 마지막에 '도착' 1단계
@@ -52,6 +52,7 @@ fun RouteCandidate.toGuideSteps(): List<GuideStep> {
     fun add(type: GuideStepType, title: String, detail: String, segment: Segment?) {
         steps += GuideStep(steps.size, type, title, detail, segment)
     }
+    val segments = this.segments.mergeConsecutiveWalks() // 아래에서는 합친 목록만 쓴다
     segments.forEachIndexed { i, seg ->
         when (seg.mode) {
             TransitMode.WALK -> add(GuideStepType.WALK, "${seg.endName}까지 걷기", "도보 ${seg.durationMinutes}분 · ${seg.distanceMeters}m", seg)
@@ -82,4 +83,21 @@ fun RouteCandidate.toGuideSteps(): List<GuideStep> {
     }
     add(GuideStepType.ARRIVED, "${destination.name} 도착", destination.address, null)
     return steps
+}
+
+/** 연달아 오는 도보 구간을 하나로 합친다: 시간·거리는 더하고, 경로선은 이어 붙이고, 도착지는 마지막 구간 것. */
+private fun List<Segment>.mergeConsecutiveWalks(): List<Segment> = fold(mutableListOf()) { merged, seg ->
+    val last = merged.lastOrNull()
+    if (last != null && last.mode == TransitMode.WALK && seg.mode == TransitMode.WALK) {
+        merged[merged.lastIndex] = last.copy(
+            durationMinutes = last.durationMinutes + seg.durationMinutes,
+            endName = seg.endName,
+            distanceMeters = last.distanceMeters + seg.distanceMeters,
+            // 앞 구간 끝점과 뒤 구간 첫 점이 같으면 한 번만 넣는다
+            path = last.path + if (last.path.lastOrNull() == seg.path.firstOrNull()) seg.path.drop(1) else seg.path,
+        )
+    } else {
+        merged += seg
+    }
+    merged
 }

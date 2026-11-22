@@ -4,6 +4,7 @@ import com.bloom.core.guide.Geo
 import com.bloom.core.guide.GuideEngine
 import com.bloom.core.guide.GuideProgress
 import com.bloom.core.guide.GuideThresholds
+import com.bloom.core.model.GuideStep
 import com.bloom.core.model.GuideStepType
 import com.bloom.core.model.LatLng
 import com.bloom.core.model.LocationFix
@@ -280,5 +281,40 @@ class GuideEngineTest {
             p = e.onNextPressed(p, 0)
         }
         assertFalse(e.needsManualAdvance(p))          // 마지막 도보: 목적지 좌표는 항상 있음
+    }
+
+    @Test
+    fun `도보 구간이 연달아 오면 한 단계로 합쳐서 승차 지점까지 이어진다`() {
+        val mid = at(-150.0, 0.0)
+        val twoWalks = route(
+            Segment(TransitMode.WALK, 2, "도보", "", "골목", distanceMeters = 150, path = listOf(origin, mid)),
+            Segment(TransitMode.WALK, 2, "도보", "", "A정류장", distanceMeters = 150, path = listOf(mid, stopA)),
+            Segment(TransitMode.BUS, 10, "7016", "A정류장", "B정류장", stopCount = 5, path = listOf(stopA, stopB)),
+            walk(stopB, dest, "목적지"),
+        )
+        val steps = twoWalks.toGuideSteps()
+        val firstWalk = steps.first()
+        assertEquals(GuideStepType.WALK, firstWalk.type)
+        assertEquals(GuideStepType.WAIT_BOARDING, steps[1].type)
+        assertEquals("A정류장까지 걷기", firstWalk.title)
+        assertEquals(4, firstWalk.segment!!.durationMinutes)
+        assertEquals(300, firstWalk.segment!!.distanceMeters)
+        assertEquals(listOf(origin, mid, stopA), firstWalk.segment!!.path) // 이음점은 한 번만
+
+        val e = GuideEngine(steps, dest)
+        val p = e.onLocation(e.start(0), fix(at(-30.0, 0.0), 5_000))
+        assertEquals(GuideStepType.WAIT_BOARDING, e.type(p))
+    }
+
+    @Test
+    fun `도보 다음에 넘어갈 목표가 없는 단계가 오면 다음 단계 버튼이 필요하다고 알린다`() {
+        val walkSeg = walk(origin, stopA, "A")
+        val steps = listOf(
+            GuideStep(0, GuideStepType.WALK, "걷기", "", walkSeg),
+            GuideStep(1, GuideStepType.WALK, "또 걷기", "", walkSeg),
+            GuideStep(2, GuideStepType.ARRIVED, "도착", "", null),
+        )
+        val e = GuideEngine(steps, dest)
+        assertTrue(e.needsManualAdvance(e.start(0)))
     }
 }
