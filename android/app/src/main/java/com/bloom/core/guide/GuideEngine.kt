@@ -33,7 +33,7 @@ data class GuideProgress(
  * - 승차·하차 지점 = 대중교통 구간 경로선의 시작·끝 좌표
  */
 class GuideEngine(
-    private val steps: List<GuideStep>,
+    val steps: List<GuideStep>,
     private val destination: LatLng,
 ) {
     init {
@@ -84,6 +84,16 @@ class GuideEngine(
     fun onAlightPressed(progress: GuideProgress, now: Long): GuideProgress =
         if (currentStep(progress).type == GuideStepType.WAIT_ALIGHTING) advance(progress, now) else progress
 
+    /** 단계 목록에서 특정 단계를 골라 이동. 차량 이동 이후로 옮기면 지금을 승차 시각으로 본다. */
+    fun moveTo(progress: GuideProgress, index: Int, now: Long): GuideProgress {
+        val target = index.coerceIn(0, steps.lastIndex)
+        val boardedAt = when (steps[target].type) {
+            GuideStepType.RIDING, GuideStepType.WAIT_ALIGHTING, GuideStepType.ALIGHTED -> progress.boardedAt ?: now
+            else -> null
+        }
+        return GuideProgress(stepIndex = target, stepStartedAt = now, boardedAt = boardedAt)
+    }
+
     /** '다음 단계' 버튼(위치가 부정확할 때 등 수동 전환). */
     fun onNextPressed(progress: GuideProgress, now: Long): GuideProgress = advance(progress, now)
 
@@ -109,16 +119,26 @@ class GuideEngine(
             now >= estimatedArrivalAt(step.segment!!, boardedAt)
     }
 
-    /** 남은 정거장 수(경과 시간 추정). 지하철은 이 값이 기본, 버스는 정류소 대조 실패 시 대체값(표 2-1). */
+    /**
+     * 남은 정거장 수. 지하철은 경과 시간 추정이 기본, 버스는 정류소 대조 실패 시 대체값(표 2-1).
+     * 하차 대기는 '다음 정류장(역)에서 하차' 단계라 항상 1이고, 차량 이동 중에는 시간 추정이 늦어도 2 밑으로 내려가지 않는다
+     * (버스는 위치로 먼저 하차 대기로 넘어가므로, 시간 추정만 믿으면 단계와 숫자가 어긋난다).
+     */
     fun remainingStops(progress: GuideProgress, now: Long): Int? {
         val step = currentStep(progress)
         val segment = step.segment ?: return null
-        val boardedAt = progress.boardedAt ?: return null
-        if (step.type != GuideStepType.RIDING && step.type != GuideStepType.WAIT_ALIGHTING) return null
-        val perStop = perStopMillis(segment)
-        if (perStop <= 0) return null // 소요 시간을 모르면(0분 등) 추정하지 않는다
-        val passed = ((now - boardedAt) / perStop).toInt()
-        return (segment.stopsOrOne() - passed).coerceIn(1, segment.stopsOrOne())
+        return when (step.type) {
+            GuideStepType.WAIT_ALIGHTING -> 1
+            GuideStepType.RIDING -> {
+                val boardedAt = progress.boardedAt ?: return null
+                val perStop = perStopMillis(segment)
+                if (perStop <= 0) return null // 소요 시간을 모르면(0분 등) 추정하지 않는다
+                val stops = segment.stopsOrOne()
+                val passed = ((now - boardedAt) / perStop).toInt()
+                (stops - passed).coerceIn(minOf(2, stops), stops)
+            }
+            else -> null
+        }
     }
 
     /**

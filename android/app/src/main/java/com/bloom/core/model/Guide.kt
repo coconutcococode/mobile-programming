@@ -33,10 +33,24 @@ data class GuideSession(
     val steps: List<GuideStep>,
     val currentStepIndex: Int = 0,
     val arrival: ArrivalInfo? = null,
+    /** 도보 중 경로선 50m 이상 20초 → '재탐색' 버튼 (FR-06) */
     val isOffRoute: Boolean = false,
+    /** 부정확한 위치만 30초 이상 → '위치가 부정확합니다' + '다음 단계' 버튼 (UC-01 A5) */
+    val isLocationInaccurate: Boolean = false,
+    /** 좌표가 없어 이 단계는 자동으로 못 넘어감 → '다음 단계' 버튼 */
+    val needsManualAdvance: Boolean = false,
+    /** 남은 정거장(경과 시간 추정). 차량 이동·하차 대기 단계에서만 값이 있다 */
+    val remainingStops: Int? = null,
+    /** 지하철 하차역 추정 도착 시각이 지남 → "○○역에서 내리세요" */
+    val isAtAlightingStation: Boolean = false,
+    /** 위치 서비스가 다음에 쓸 위치 갱신 간격 */
+    val locationIntervalMillis: Long = 5_000L,
 ) {
     val currentStep: GuideStep get() = steps[currentStepIndex]
     val isLastStep: Boolean get() = currentStepIndex == steps.lastIndex
+
+    /** '다음 단계' 버튼을 보여 줄지 */
+    val showNextButton: Boolean get() = isLocationInaccurate || needsManualAdvance
 }
 
 /**

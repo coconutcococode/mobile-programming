@@ -32,7 +32,7 @@ class FakeRouteRepositoryTest {
     @Test
     fun `안내를 종료하면 보관 중인 경로 후보도 지워진다`() = runTest {
         val routes = FakeRouteRepository()
-        val session = InMemoryGuideSessionRepository(routes)
+        val session = InMemoryGuideSessionRepository(routes) { 0L }
         val destination = Place("p1", "목적지", "주소", LatLng(37.5551, 126.9228))
         val picked = routes.searchRoutes(LatLng.SeoulCityHall, destination).getOrThrow().first()
 

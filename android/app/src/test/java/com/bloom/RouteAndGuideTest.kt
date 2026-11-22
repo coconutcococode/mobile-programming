@@ -80,7 +80,7 @@ class RouteAndGuideTest {
 
     @Test
     fun `안내 세션은 끝 단계를 넘지 않고, 종료하면 폐기된다`() {
-        val repo = InMemoryGuideSessionRepository(FakeRouteRepository())
+        val repo = InMemoryGuideSessionRepository(FakeRouteRepository()) { 0L }
         val route = candidate("r", 10, 0, 500, listOf(Segment(TransitMode.WALK, 10, "도보", "", "목적지", distanceMeters = 500)))
         repo.start(route)
         repeat(10) { repo.next() }

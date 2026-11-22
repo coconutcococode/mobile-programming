@@ -124,6 +124,7 @@ class GuideEngineTest {
         assertEquals(2, e.remainingStops(p, boarded + 5 * 60_000))
         p = e.onTick(p, boarded + 6 * 60_000)
         assertEquals(GuideStepType.WAIT_ALIGHTING, e.type(p))
+        assertEquals(1, e.remainingStops(p, boarded + 6 * 60_000))
 
         assertFalse(e.isAtAlightingStation(p, boarded + 8 * 60_000 - 1))
         assertTrue(e.isAtAlightingStation(p, boarded + 8 * 60_000))
@@ -336,5 +337,16 @@ class GuideEngineTest {
         p = e.onLocation(p, fix(at(-90.0, 0.0), 25_000))
         assertFalse(p.isOffRoute)
         assertEquals(GuideStepType.WALK, e.type(p))
+    }
+
+    @Test
+    fun `버스가 위치로 먼저 하차 대기로 넘어가면 남은 정거장은 시간 추정과 상관없이 1이다`() {
+        val e = engineFor(busRoute)
+        var p = e.onBoardPressed(e.onNextPressed(e.start(0), 0), 0)
+        assertEquals(5, e.remainingStops(p, 10_000))
+        assertEquals(2, e.remainingStops(p, 9 * 60_000))          // 시간상 1이어도 차량 이동 중엔 2
+        p = e.onLocation(p, fix(at(1700.0, 0.0), 30_000))         // 하차 지점 300m → 하차 대기
+        assertEquals(GuideStepType.WAIT_ALIGHTING, e.type(p))
+        assertEquals(1, e.remainingStops(p, 30_000))
     }
 }

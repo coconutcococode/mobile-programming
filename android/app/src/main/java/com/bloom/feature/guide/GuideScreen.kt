@@ -50,6 +50,8 @@ class GuideViewModel @Inject constructor(
 ) : ViewModel() {
     val session: StateFlow<GuideSession?> = guideSessionRepository.session
     fun next() = guideSessionRepository.next()
+    fun board() = guideSessionRepository.board()
+    fun alight() = guideSessionRepository.alight()
     fun moveToStep(index: Int) = guideSessionRepository.moveToStep(index)
     fun end() = guideSessionRepository.end()
 }
@@ -104,7 +106,7 @@ fun GuideScreen(
                 Column(Modifier.padding(16.dp)) {
                     Text("현재 단계", style = MaterialTheme.typography.labelMedium, color = BloomTheme.colors.textSecondary)
                     Text(current.currentStep.title, style = MaterialTheme.typography.headlineSmall)
-                    Text(current.currentStep.detail, style = MaterialTheme.typography.bodyMedium)
+                    Text(GuideNotification.statusText(current), style = MaterialTheme.typography.bodyMedium)
                 }
             }
             Text("TODO: 실시간 도착 정보 카드 (트랙 B)", style = MaterialTheme.typography.bodySmall, color = BloomTheme.colors.textSecondary)
@@ -119,7 +121,14 @@ fun GuideScreen(
                     else -> "다음 단계"
                 },
                 large = true,
-                onClick = { if (current.isLastStep) showEndDialog = true else viewModel.next() },
+                onClick = {
+                    when {
+                        current.isLastStep -> showEndDialog = true
+                        current.currentStep.type == GuideStepType.WAIT_BOARDING -> viewModel.board()
+                        current.currentStep.type == GuideStepType.WAIT_ALIGHTING -> viewModel.alight()
+                        else -> viewModel.next()
+                    }
+                },
             )
             Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 BloomTextButton("다음 단계로 넘기기", onClick = viewModel::next)
