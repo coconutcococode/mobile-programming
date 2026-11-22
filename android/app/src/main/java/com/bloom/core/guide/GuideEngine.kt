@@ -60,7 +60,11 @@ class GuideEngine(
     }
 
     /** 위치와 상관없이 시간으로 바뀌는 전환(지하철 추정, 하차 완료 표시 시간). 서비스가 주기적으로 부른다. */
-    fun onTick(progress: GuideProgress, now: Long): GuideProgress {
+    fun onTick(previous: GuideProgress, now: Long): GuideProgress {
+        // 부정확한 위치 뒤로 새 위치가 끊겨도 30초가 지나면 경고를 띄운다(A5). 정확한 위치가 오면 onLocation 이 해제한다.
+        val progress = previous.inaccurateSince
+            ?.let { previous.copy(isLocationInaccurate = now - it >= GuideThresholds.INACCURATE_ALERT_MILLIS) }
+            ?: previous
         val step = currentStep(progress)
         val segment = step.segment
         val boardedAt = progress.boardedAt
@@ -84,11 +88,16 @@ class GuideEngine(
     fun onAlightPressed(progress: GuideProgress, now: Long): GuideProgress =
         if (currentStep(progress).type == GuideStepType.WAIT_ALIGHTING) advance(progress, now) else progress
 
-    /** 단계 목록에서 특정 단계를 골라 이동. 차량 이동 이후로 옮기면 지금을 승차 시각으로 본다. */
+    /**
+     * 단계 목록에서 특정 단계를 골라 이동. 차량 이동 이후로 옮기면 지금을 승차 시각으로 본다.
+     * 같은 대중교통 구간 안에서 옮길 때만 기존 승차 시각을 이어 쓴다(다른 구간의 승차 시각으로 추정하면 바로 하차로 넘어가 버림).
+     */
     fun moveTo(progress: GuideProgress, index: Int, now: Long): GuideProgress {
         val target = index.coerceIn(0, steps.lastIndex)
+        val sameLeg = steps[target].segment != null && steps[target].segment === currentStep(progress).segment
         val boardedAt = when (steps[target].type) {
-            GuideStepType.RIDING, GuideStepType.WAIT_ALIGHTING, GuideStepType.ALIGHTED -> progress.boardedAt ?: now
+            GuideStepType.RIDING, GuideStepType.WAIT_ALIGHTING, GuideStepType.ALIGHTED ->
+                progress.boardedAt?.takeIf { sameLeg } ?: now
             else -> null
         }
         return GuideProgress(stepIndex = target, stepStartedAt = now, boardedAt = boardedAt)

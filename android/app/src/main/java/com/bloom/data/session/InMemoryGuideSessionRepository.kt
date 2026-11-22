@@ -37,8 +37,12 @@ class InMemoryGuideSessionRepository @Inject constructor(
     private var progress: GuideProgress? = null
     private val lock = Any()
 
+    /** 안내를 시작·종료할 때마다 1씩 올린다. 재탐색 검색 중에 안내가 바뀌었는지 알아보는 데 쓴다. */
+    private var generation = 0L
+
     override fun start(route: RouteCandidate) = synchronized(lock) {
         // 새 경로로 재탐색하면 기존 안내 데이터를 교체한다.
+        generation++
         val newEngine = GuideEngine(route.toGuideSteps(), route.destination.location)
         engine = newEngine
         publish(route, newEngine, newEngine.start(clock.now()), arrival = null)
@@ -63,13 +67,21 @@ class InMemoryGuideSessionRepository @Inject constructor(
     }
 
     override suspend fun reroute(from: LatLng): Boolean {
-        val destination = _session.value?.route?.destination ?: return false
+        val (destination, startedGeneration) = synchronized(lock) {
+            val destination = _session.value?.route?.destination ?: return false
+            destination to generation
+        }
         val best = routeRepository.searchRoutes(from, destination).getOrNull()
             ?.sortedFor(RouteSortType.FASTEST)
             ?.firstOrNull()
-            ?: return false
         synchronized(lock) {
-            if (_session.value == null) return false // 검색하는 사이 안내가 끝났으면 다시 시작하지 않는다
+            // 검색하는 사이 안내가 끝났거나 다른 안내가 시작됐으면 이 결과는 버린다(새 안내를 옛 목적지로 덮어쓰지 않음).
+            if (generation != startedGeneration) {
+                // 안내가 끝난 뒤 검색이 후보를 다시 채웠을 수 있으므로 지운다(NFR-07). 새 안내가 있으면 그 안내가 후보를 관리한다.
+                if (_session.value == null) routeRepository.clearCandidates()
+                return false
+            }
+            if (best == null) return false
             start(best)
         }
         return true
@@ -77,6 +89,7 @@ class InMemoryGuideSessionRepository @Inject constructor(
 
     /** 안내 화면·알림·도착 처리 모두 여기를 거치므로, 경로 후보도 이 한 곳에서 함께 지운다. */
     override fun end() = synchronized(lock) {
+        generation++
         engine = null
         progress = null
         _session.value = null
