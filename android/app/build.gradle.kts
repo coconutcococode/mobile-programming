@@ -34,6 +34,11 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+        // 카카오맵 SDK 는 ARM 용 네이티브 라이브러리(libK3fAndroid.so)만 제공한다.
+        // x86 폴더가 함께 들어가면 x86_64 에뮬레이터가 x86 을 골라 지도 라이브러리를 못 찾고 앱이 꺼지므로 ARM 만 넣는다.
+        // (최신 x86_64 에뮬레이터는 ARM 앱을 변환해 실행할 수 있고, 갤럭시 실기기는 arm64-v8a)
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+
         buildConfigField("String", "KAKAO_NATIVE_APP_KEY", "\"${localProp("KAKAO_NATIVE_APP_KEY")}\"")
     }
 

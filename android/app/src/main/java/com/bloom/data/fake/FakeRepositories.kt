@@ -209,7 +209,8 @@ class FakeFavoriteRepository @Inject constructor(
 
     override suspend fun add(place: Place, alias: String): Result<Favorite> {
         if (authRepository.currentUser.value == null) return Result.failure(IllegalStateException("로그인이 필요해요"))
-        val favorite = Favorite(UUID.randomUUID().toString(), place.id, alias, place.name, place.address)
+        // 검색어 자리에 카카오 장소 이름을 넣지 않는다(FR-05, NFR-11). 사용자가 직접 친 검색어가 없으면 비워 둔다.
+        val favorite = Favorite(UUID.randomUUID().toString(), place.id, alias, searchKeyword = "", address = place.address)
         favorites.update { it + favorite }
         return Result.success(favorite)
     }
