@@ -13,6 +13,7 @@ import com.bloom.feature.home.HomeScreen
 import com.bloom.feature.nearby.NearbyScreen
 import com.bloom.feature.route.RouteCandidatesScreen
 import com.bloom.feature.route.RouteDetailScreen
+import com.bloom.feature.search.SearchScreen
 import com.bloom.feature.settings.DataSourceScreen
 import com.bloom.feature.settings.LocationPermissionScreen
 import com.bloom.feature.settings.SettingsScreen
@@ -24,12 +25,13 @@ fun BloomNavHost(
     onNavigateToTab: (TopLevelTab) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // 지도 핀, 주변 목록(S-09 길찾기)에서 올 때는 사용자가 입력한 검색어가 없다
     val toRouteCandidates: (Place) -> Unit = { place ->
-        navController.navigate(RouteCandidatesRoute(place.id, place.name))
+        navController.navigate(RouteCandidatesRoute(place.id, place.name, searchQuery = null))
     }
     // 즐겨찾기는 저장된 placeId 로 바로 넘긴다(장소 조회는 경로 후보 화면이 맡음).
     val toFavoriteRouteCandidates: (Favorite) -> Unit = { favorite ->
-        navController.navigate(RouteCandidatesRoute(favorite.placeId, favorite.alias))
+        navController.navigate(RouteCandidatesRoute(favorite.placeId, favorite.alias, searchQuery = favorite.searchKeyword))
     }
     // '안내 시작' 시 S-02·S-03 은 스택에서 제거 → 스택은 항상 [홈, 안내]. S-04 뒤로가기 = 홈(안내는 계속).
     val toGuide: () -> Unit = {
@@ -48,6 +50,18 @@ fun BloomNavHost(
                 onGuideBannerClick = toGuide,
                 onLocationPermissionDenied = { navController.navigate(LocationPermissionRoute) },
                 onLoginRequired = { onNavigateToTab(TopLevelTab.SETTINGS) },
+            )
+        }
+        composable<SearchRoute> {
+            SearchScreen(
+                onBack = { navController.popBackStack() },
+                // 검색 화면은 스택에서 빼고 S-02 로 간다 → S-02 에서 뒤로가기 = 홈
+                onDestinationChosen = { placeId, displayName, typedQuery ->
+                    navController.navigate(RouteCandidatesRoute(placeId, displayName, searchQuery = typedQuery)) {
+                        popUpTo<SearchRoute> { inclusive = true }
+                    }
+                },
+                onLocationPermissionDenied = { navController.navigate(LocationPermissionRoute) },
             )
         }
         composable<NearbyRoute> {

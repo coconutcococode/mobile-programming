@@ -21,8 +21,19 @@ import kotlinx.serialization.Serializable
 @Serializable data object SettingsRoute      // S-08 설정
 
 // ── 스택 화면 ──
-/** S-02 경로 후보 목록. 목적지는 장소 ID 로 넘기고 화면에서 다시 조회한다. */
-@Serializable data class RouteCandidatesRoute(val destinationPlaceId: String, val destinationName: String)
+/** S-01 검색 상태(하단 탭 숨김). 결과를 고르면 S-02 로 */
+@Serializable data object SearchRoute
+
+/**
+ * S-02 경로 후보 목록. 목적지는 장소 ID 로 넘기고 화면에서 다시 조회한다.
+ * @param searchQuery 사용자가 직접 입력한 검색어(검색 · 최근 목적지 · 즐겨찾기에서 올 때). 지도 핀 · 주변에서 오면 null.
+ *  즐겨찾기 '검색어' 칸에는 장소 이름이 아니라 이 값만 저장한다(NFR-11, 팀 합의 11/22) → 역할B 저장 때 사용.
+ */
+@Serializable data class RouteCandidatesRoute(
+    val destinationPlaceId: String,
+    val destinationName: String,
+    val searchQuery: String? = null,
+)
 
 /** S-03 경로 상세. 후보는 메모리(RouteRepository)에 있으므로 ID 만 넘긴다. */
 @Serializable data class RouteDetailRoute(val candidateId: String)

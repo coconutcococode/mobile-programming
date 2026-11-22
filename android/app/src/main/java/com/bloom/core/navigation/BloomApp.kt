@@ -45,8 +45,8 @@ fun BloomApp() {
             ?.let { currentTab = it }
     }
 
-    // S-04 안내 진행 중에는 하단 탭을 숨긴다.
-    val showBottomBar = destination?.hasRoute(GuideRoute::class) != true
+    // S-04 안내 진행 중과 검색 상태에서는 하단 탭을 숨긴다.
+    val showBottomBar = destination?.hasRoute(GuideRoute::class) != true && destination?.hasRoute(SearchRoute::class) != true
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0), // 상단 인셋은 각 화면이 처리(지도는 상태바 아래까지)

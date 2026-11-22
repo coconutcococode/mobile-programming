@@ -10,6 +10,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Upsert
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -74,14 +76,50 @@ interface PendingFavoriteChangeDao {
     suspend fun delete(seq: Long)
 }
 
+/** 최근 목적지(최대 20개). 장소 ID + 사용자가 입력한 검색어만 저장(카카오 데이터 저장 금지, NFR-11). */
+@Entity(tableName = "recent_destinations")
+data class RecentDestinationEntity(
+    @PrimaryKey val placeId: String,
+    val query: String,
+    val savedAtMillis: Long,
+)
+
+@Dao
+interface RecentDestinationDao {
+    @Query("SELECT * FROM recent_destinations ORDER BY savedAtMillis DESC LIMIT :limit")
+    fun observe(limit: Int): Flow<List<RecentDestinationEntity>>
+
+    /** 같은 placeId 면 검색어·시각만 새로 덮어써서 맨 위로 올린다. */
+    @Upsert
+    suspend fun upsert(entity: RecentDestinationEntity)
+
+    /** 최신 [keep]개만 남기고 지운다. */
+    @Query("DELETE FROM recent_destinations WHERE placeId NOT IN (SELECT placeId FROM recent_destinations ORDER BY savedAtMillis DESC LIMIT :keep)")
+    suspend fun trim(keep: Int)
+}
+
 @Database(
-    entities = [FavoriteEntity::class, PendingFavoriteChangeEntity::class],
-    version = 1,
+    entities = [FavoriteEntity::class, PendingFavoriteChangeEntity::class, RecentDestinationEntity::class],
+    version = 2,
     exportSchema = true,
 )
 abstract class BloomDatabase : RoomDatabase() {
     abstract fun favoriteDao(): FavoriteDao
     abstract fun pendingFavoriteChangeDao(): PendingFavoriteChangeDao
+    abstract fun recentDestinationDao(): RecentDestinationDao
+}
+
+/**
+ * 버전 1 → 2: 최근 목적지 표 추가. 이미 앱을 설치한 폰의 즐겨찾기 표를 지우지 않으려고
+ * '처음부터 다시 만들기' 대신 새 표만 만드는 이전 규칙(Migration)을 둔다.
+ */
+val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `recent_destinations` (`placeId` TEXT NOT NULL, `query` TEXT NOT NULL, " +
+                "`savedAtMillis` INTEGER NOT NULL, PRIMARY KEY(`placeId`))",
+        )
+    }
 }
 
 @Module
@@ -90,11 +128,16 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): BloomDatabase =
-        Room.databaseBuilder(context, BloomDatabase::class.java, "bloom.db").build()
+        Room.databaseBuilder(context, BloomDatabase::class.java, "bloom.db")
+            .addMigrations(MIGRATION_1_2)
+            .build()
 
     @Provides
     fun provideFavoriteDao(db: BloomDatabase): FavoriteDao = db.favoriteDao()
 
     @Provides
     fun providePendingFavoriteChangeDao(db: BloomDatabase): PendingFavoriteChangeDao = db.pendingFavoriteChangeDao()
+
+    @Provides
+    fun provideRecentDestinationDao(db: BloomDatabase): RecentDestinationDao = db.recentDestinationDao()
 }

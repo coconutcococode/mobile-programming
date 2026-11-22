@@ -6,10 +6,12 @@ import com.bloom.data.fake.FakeFavoriteRepository
 import com.bloom.data.fake.FakePlaceRepository
 import com.bloom.data.fake.FakeRouteRepository
 import com.bloom.data.fake.FakeTransitRepository
+import com.bloom.data.local.RoomRecentDestinationRepository
 import com.bloom.data.repository.AuthRepository
 import com.bloom.data.repository.FavoriteRepository
 import com.bloom.data.repository.GuideSessionRepository
 import com.bloom.data.repository.PlaceRepository
+import com.bloom.data.repository.RecentDestinationRepository
 import com.bloom.data.repository.RouteRepository
 import com.bloom.data.repository.TransitRepository
 import com.bloom.data.session.InMemoryGuideSessionRepository
@@ -40,6 +42,9 @@ abstract class DataModule {
 
     @Binds
     abstract fun bindAuthRepository(impl: FakeAuthRepository): AuthRepository
+
+    @Binds
+    abstract fun bindRecentDestinationRepository(impl: RoomRecentDestinationRepository): RecentDestinationRepository
 
     @Binds
     abstract fun bindGuideSessionRepository(impl: InMemoryGuideSessionRepository): GuideSessionRepository
