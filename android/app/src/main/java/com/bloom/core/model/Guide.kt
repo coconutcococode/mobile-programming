@@ -2,8 +2,8 @@ package com.bloom.core.model
 
 import java.time.LocalTime
 
-/** 안내 단계 종류 — 요구사항 분석서 표 2-1: 도보 → 승차 대기 → 차량 이동 → 하차 대기 → 하차 완료 */
-enum class GuideStepType { WALK, WAIT_BOARDING, RIDING, WAIT_ALIGHTING, ARRIVED }
+/** 안내 단계 종류 — 요구사항 분석서 표 2-1: 도보 이동 → 승차 대기 → 차량 이동 → 하차 대기 → 하차 완료 → … → 도착 */
+enum class GuideStepType { WALK, WAIT_BOARDING, RIDING, WAIT_ALIGHTING, ALIGHTED, ARRIVED }
 
 data class GuideStep(
     val index: Int,
@@ -40,21 +40,43 @@ data class GuideSession(
 }
 
 /**
- * 경로 → 안내 단계 목록. 초안이며 단계 생성 규칙은 트랙 B(길안내)에서 확정한다.
- * 대중교통 구간 1개 = 승차 대기·차량 이동·하차 대기 3단계, 도보 구간 1개 = 1단계, 마지막에 도착 1단계.
+ * 경로 → 안내 단계 목록 (분석서 표 2-1).
+ * - 도보 구간 1개 = '도보 이동' 1단계
+ * - 대중교통 구간 1개 = 승차 대기 · 차량 이동 · 하차 대기 · 하차 완료 4단계
+ * - 지하철 → 지하철 환승은 하차 완료 없이 "갈아타세요" 안내 후 바로 다음 열차의 승차 대기 (UC-01 A8)
+ * - 마지막에 '도착' 1단계
+ * 환승 4회(대중교통 5구간 + 도보 6구간)여도 6 + 5×4 + 1 = 27단계로 [RouteLimits.MAX_GUIDE_STEPS] 이내.
  */
 fun RouteCandidate.toGuideSteps(): List<GuideStep> {
     val steps = mutableListOf<GuideStep>()
     fun add(type: GuideStepType, title: String, detail: String, segment: Segment?) {
         steps += GuideStep(steps.size, type, title, detail, segment)
     }
-    segments.forEach { seg ->
+    segments.forEachIndexed { i, seg ->
         when (seg.mode) {
             TransitMode.WALK -> add(GuideStepType.WALK, "${seg.endName}까지 걷기", "도보 ${seg.durationMinutes}분 · ${seg.distanceMeters}m", seg)
             TransitMode.BUS, TransitMode.SUBWAY -> {
-                add(GuideStepType.WAIT_BOARDING, "${seg.startName}에서 ${seg.label} 승차", "${seg.endName} 방면", seg)
-                add(GuideStepType.RIDING, "${seg.label} 이동 중", "${seg.stopCount}개 정류장 · ${seg.durationMinutes}분", seg)
-                add(GuideStepType.WAIT_ALIGHTING, "${seg.endName}에서 하차", "하차 준비", seg)
+                val isSubway = seg.mode == TransitMode.SUBWAY
+                val transfersFromSubway = isSubway && segments.getOrNull(i - 1)?.mode == TransitMode.SUBWAY
+                val transfersToSubway = isSubway && segments.getOrNull(i + 1)?.mode == TransitMode.SUBWAY
+                add(
+                    GuideStepType.WAIT_BOARDING,
+                    if (transfersFromSubway) "${seg.label} 갈아타기" else "${seg.startName}에서 ${seg.label} 승차",
+                    "${seg.endName} 방면",
+                    seg,
+                )
+                add(GuideStepType.RIDING, "${seg.label} 이동 중", "${seg.stopCount}개 ${if (isSubway) "역" else "정류장"} · ${seg.durationMinutes}분", seg)
+                add(
+                    GuideStepType.WAIT_ALIGHTING,
+                    when {
+                        transfersToSubway -> "다음 역에서 환승"
+                        isSubway -> "다음 역에서 하차"
+                        else -> "다음 정류장에서 하차"
+                    },
+                    "${seg.endName}에서 내리세요",
+                    seg,
+                )
+                if (!transfersToSubway) add(GuideStepType.ALIGHTED, "${seg.endName} 하차 완료", "", seg)
             }
         }
     }

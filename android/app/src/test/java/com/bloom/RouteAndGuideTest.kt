@@ -47,7 +47,7 @@ class RouteAndGuideTest {
     }
 
     @Test
-    fun `대중교통 구간은 승차대기-이동-하차대기 3단계, 마지막은 도착`() {
+    fun `대중교통 구간은 승차대기-이동-하차대기-하차완료 4단계, 마지막은 도착`() {
         val route = candidate(
             "r", 18, 0, 780,
             listOf(
@@ -60,7 +60,7 @@ class RouteAndGuideTest {
         assertEquals(
             listOf(
                 GuideStepType.WALK,
-                GuideStepType.WAIT_BOARDING, GuideStepType.RIDING, GuideStepType.WAIT_ALIGHTING,
+                GuideStepType.WAIT_BOARDING, GuideStepType.RIDING, GuideStepType.WAIT_ALIGHTING, GuideStepType.ALIGHTED,
                 GuideStepType.WALK,
                 GuideStepType.ARRIVED,
             ),
