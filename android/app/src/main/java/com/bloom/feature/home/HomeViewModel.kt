@@ -7,11 +7,13 @@ import com.bloom.core.model.Favorite
 import com.bloom.core.model.GuideSession
 import com.bloom.core.model.LatLng
 import com.bloom.core.model.Place
+import com.bloom.core.model.RecentDestination
 import com.bloom.core.network.NetworkMonitor
 import com.bloom.data.repository.AuthRepository
 import com.bloom.data.repository.FavoriteRepository
 import com.bloom.data.repository.GuideSessionRepository
 import com.bloom.data.repository.PlaceRepository
+import com.bloom.data.repository.RecentDestinationRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,6 +30,7 @@ class HomeViewModel @Inject constructor(
     private val placeRepository: PlaceRepository,
     private val favoriteRepository: FavoriteRepository,
     private val locationTracker: LocationTracker,
+    private val recentDestinationRepository: RecentDestinationRepository,
     authRepository: AuthRepository,
     guideSessionRepository: GuideSessionRepository,
     networkMonitor: NetworkMonitor,
@@ -41,6 +44,10 @@ class HomeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     val favorites: StateFlow<List<Favorite>> = favoriteRepository.observeFavorites()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** 시트의 최근 목적지(최신순, 최대 20개). 장소 ID와 사용자가 입력한 검색어만 있다 */
+    val recents: StateFlow<List<RecentDestination>> = recentDestinationRepository.observe()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** S-01-5 오프라인: 지도 대신 안내, 즐겨찾기 목록은 그대로 */
@@ -77,6 +84,13 @@ class HomeViewModel @Inject constructor(
             _recenterRequest.value++
             _locating.value = false
         }
+    }
+
+    fun hasLocationPermission(): Boolean = locationTracker.hasPreciseLocationPermission()
+
+    /** 최근 목적지를 다시 고르면 목록 맨 위로 올린다(검색 화면과 같은 규칙) */
+    fun reuseRecent(recent: RecentDestination) {
+        viewModelScope.launch { recentDestinationRepository.save(recent.placeId, recent.query) }
     }
 
     /** 지도 핀 탭 → S-09 시트. 이전 조회가 남아 있으면 취소해서 늦게 온 결과가 시트를 덮지 않게 한다. */

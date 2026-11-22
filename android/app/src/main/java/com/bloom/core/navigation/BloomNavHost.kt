@@ -30,8 +30,9 @@ fun BloomNavHost(
         navController.navigate(RouteCandidatesRoute(place.id, place.name, searchQuery = null))
     }
     // 즐겨찾기는 저장된 placeId 로 바로 넘긴다(장소 조회는 경로 후보 화면이 맡음).
+    // 검색 없이 저장한 즐겨찾기(지도 핀 · 주변)는 검색어가 빈 값이라 '검색어 없음(null)'으로 넘긴다
     val toFavoriteRouteCandidates: (Favorite) -> Unit = { favorite ->
-        navController.navigate(RouteCandidatesRoute(favorite.placeId, favorite.alias, searchQuery = favorite.searchKeyword))
+        navController.navigate(RouteCandidatesRoute(favorite.placeId, favorite.alias, searchQuery = favorite.searchKeyword.ifBlank { null }))
     }
     // '안내 시작' 시 S-02·S-03 은 스택에서 제거 → 스택은 항상 [홈, 안내]. S-04 뒤로가기 = 홈(안내는 계속).
     val toGuide: () -> Unit = {
@@ -45,8 +46,13 @@ fun BloomNavHost(
     ) {
         composable<HomeRoute> {
             HomeScreen(
+                onSearchClick = { navController.navigate(SearchRoute) },
                 onPlaceSelected = toRouteCandidates,
                 onFavoriteClick = toFavoriteRouteCandidates,
+                // 최근 목적지는 장소 이름을 저장하지 않으므로 표시 이름도 검색어를 쓴다
+                onRecentClick = { recent ->
+                    navController.navigate(RouteCandidatesRoute(recent.placeId, recent.query, searchQuery = recent.query))
+                },
                 onGuideBannerClick = toGuide,
                 onLocationPermissionDenied = { navController.navigate(LocationPermissionRoute) },
                 onLoginRequired = { onNavigateToTab(TopLevelTab.SETTINGS) },
