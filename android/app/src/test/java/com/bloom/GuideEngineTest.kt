@@ -225,4 +225,60 @@ class GuideEngineTest {
         assertEquals(100.0, Geo.distanceToPathMeters(at(-100.0, 0.0), listOf(stopA, stopB))!!, 1.0) // 선분 끝 바깥
         assertEquals(null, Geo.distanceToPathMeters(stopA, emptyList()))
     }
+
+    @Test
+    fun `구간 소요 시간이 0분이어도 앱이 꺼지지 않고 남은 정거장은 모름으로 둔다`() {
+        val zero = route(
+            walk(origin, stopA, "A역"),
+            Segment(TransitMode.SUBWAY, 0, "2호선", "A역", "B역", stopCount = 4, path = listOf(stopA, stopB)),
+            walk(stopB, dest, "목적지"),
+        )
+        val e = engineFor(zero)
+        val riding = e.onBoardPressed(e.onNextPressed(e.start(0), 0), 0)
+        assertEquals(GuideStepType.RIDING, e.type(riding))
+        assertEquals(null, e.remainingStops(riding, 60_000))
+    }
+
+    @Test
+    fun `버스 구간 좌표가 없으면 자동 전환 대신 다음 단계 버튼이 필요하다고 알린다`() {
+        val noPath = route(
+            walk(origin, stopA, "A정류장"),
+            Segment(TransitMode.BUS, 10, "7016", "A정류장", "B정류장", stopCount = 5),
+            walk(stopB, dest, "목적지"),
+        )
+        val e = engineFor(noPath)
+        var p = e.start(0)
+        assertTrue(e.needsManualAdvance(p))                       // 도보: 다음 승차 지점을 모름
+        p = e.onLocation(p, fix(stopA, 5_000))
+        assertEquals(GuideStepType.WALK, e.type(p))               // 승차 지점에 와도 자동으로 안 넘어감
+        p = e.onNextPressed(p, 6_000)
+        assertTrue(e.needsManualAdvance(p))                       // 승차 대기
+        p = e.onBoardPressed(p, 7_000)
+        assertTrue(e.needsManualAdvance(p))                       // 차량 이동
+
+        val normal = engineFor(busRoute)
+        assertFalse(normal.needsManualAdvance(normal.start(0)))
+    }
+
+    @Test
+    fun `지하철 구간은 좌표가 없어도 승차 버튼과 시간으로 넘어가므로 다음 단계 버튼이 필요 없다`() {
+        val noPath = route(
+            walk(origin, stopA, "A역"),
+            Segment(TransitMode.SUBWAY, 8, "2호선", "A역", "B역", stopCount = 4),
+            walk(stopB, dest, "목적지"),
+        )
+        val e = engineFor(noPath)
+        var p = e.start(0)
+        assertTrue(e.needsManualAdvance(p))           // 역까지 도보: 역 위치를 모르면 수동
+        p = e.onNextPressed(p, 0)
+        val transitTypes = listOf(
+            GuideStepType.WAIT_BOARDING, GuideStepType.RIDING, GuideStepType.WAIT_ALIGHTING, GuideStepType.ALIGHTED,
+        )
+        transitTypes.forEach { expected ->
+            assertEquals(expected, e.type(p))
+            assertFalse("$expected", e.needsManualAdvance(p))
+            p = e.onNextPressed(p, 0)
+        }
+        assertFalse(e.needsManualAdvance(p))          // 마지막 도보: 목적지 좌표는 항상 있음
+    }
 }

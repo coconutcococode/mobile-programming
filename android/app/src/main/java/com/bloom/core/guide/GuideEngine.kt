@@ -115,8 +115,29 @@ class GuideEngine(
         val segment = step.segment ?: return null
         val boardedAt = progress.boardedAt ?: return null
         if (step.type != GuideStepType.RIDING && step.type != GuideStepType.WAIT_ALIGHTING) return null
-        val passed = ((now - boardedAt) / perStopMillis(segment)).toInt()
+        val perStop = perStopMillis(segment)
+        if (perStop <= 0) return null // 소요 시간을 모르면(0분 등) 추정하지 않는다
+        val passed = ((now - boardedAt) / perStop).toInt()
         return (segment.stopsOrOne() - passed).coerceIn(1, segment.stopsOrOne())
+    }
+
+    /**
+     * 지금 단계가 자동(위치·시간)으로 넘어갈 수 없으면 true → 화면·알림에 '다음 단계' 버튼을 보여 준다.
+     * 대중교통 구간 경로선에 승차·하차 좌표가 없을 때 생긴다. 위치가 부정확할 때(A5)와 같은 방식으로 수동 전환하게 한다.
+     */
+    fun needsManualAdvance(progress: GuideProgress): Boolean {
+        val step = currentStep(progress)
+        val segment = step.segment
+        return when (step.type) {
+            GuideStepType.WALK -> {
+                val next = steps.getOrNull(progress.stepIndex + 1)
+                next?.type == GuideStepType.WAIT_BOARDING && next.segment?.boardingPoint() == null
+            }
+            // 지하철은 승차 버튼·시간으로 넘어가므로 좌표가 없어도 된다
+            GuideStepType.WAIT_BOARDING -> segment.isBus() && segment!!.boardingPoint() == null
+            GuideStepType.RIDING, GuideStepType.WAIT_ALIGHTING -> segment.isBus() && segment!!.alightingPoint() == null
+            GuideStepType.ALIGHTED, GuideStepType.ARRIVED -> false
+        }
     }
 
     /** 다음 위치 요청 간격. 지하철 차량 이동 중에는 GPS가 안 잡히므로 늘린다(NFR-04). */
