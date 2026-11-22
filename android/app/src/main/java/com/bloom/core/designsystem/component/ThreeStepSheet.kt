@@ -31,6 +31,7 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -125,8 +126,15 @@ fun ThreeStepSheetScaffold(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(maxHeight - expandedTopMargin)
-                .offset { IntOffset(0, sheetTop().roundToInt()) },
+                .offset { IntOffset(0, sheetTop().roundToInt()) }
+                // 시트 높이 = 지금 화면에 보이는 만큼(화면 높이 - 시트 윗변).
+                // 펼침 높이로 고정하면 중간 · 접힘에서 아래쪽이 화면 밖으로 나가 목록 끝까지 스크롤할 수 없다.
+                // 끄는 동안 매 프레임 바뀌는 값이라 layout 단계에서 읽는다(화면 전체를 다시 그리지 않고 크기만 다시 잰다).
+                .layout { measurable, constraints ->
+                    val visibleHeight = (fullPx - sheetTop()).roundToInt().coerceAtLeast(0)
+                    val placeable = measurable.measure(constraints.copy(minHeight = visibleHeight, maxHeight = visibleHeight))
+                    layout(placeable.width, visibleHeight) { placeable.place(0, 0) }
+                },
             shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
             shadowElevation = 6.dp,
         ) {

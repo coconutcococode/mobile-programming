@@ -55,6 +55,10 @@ class HomeViewModel @Inject constructor(
     private val _locating = MutableStateFlow(false)
     val locating: StateFlow<Boolean> = _locating.asStateFlow()
 
+    /** [내 위치 보기]를 누를 때마다 1씩 오른다. 위치 값이 그대로여도 지도가 내 위치로 돌아오게 하는 신호 */
+    private val _recenterRequest = MutableStateFlow(0)
+    val recenterRequest: StateFlow<Int> = _recenterRequest.asStateFlow()
+
     private val _selectedPlace = MutableStateFlow<Place?>(null)
     val selectedPlace: StateFlow<Place?> = _selectedPlace.asStateFlow()
 
@@ -70,6 +74,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             _locating.value = true
             _myLocation.value = locationTracker.currentLocation() ?: _myLocation.value
+            _recenterRequest.value++
             _locating.value = false
         }
     }
@@ -92,8 +97,24 @@ class HomeViewModel @Inject constructor(
     private val _saveMessage = MutableStateFlow<String?>(null)
     val saveMessage: StateFlow<String?> = _saveMessage.asStateFlow()
 
+    /**
+     * ☆를 누른 장소. 값이 있으면 이름 입력 창을 띄운다.
+     * 화면 회전 때 화면(Composable)의 remember 값은 사라지지만 ViewModel 은 남으므로 여기에 둔다.
+     */
+    private val _savingPlace = MutableStateFlow<Place?>(null)
+    val savingPlace: StateFlow<Place?> = _savingPlace.asStateFlow()
+
+    fun startSaving(place: Place) {
+        _savingPlace.value = place
+    }
+
+    fun cancelSaving() {
+        _savingPlace.value = null
+    }
+
     /** [alias] 는 사용자가 저장 창에 직접 입력한 이름. 카카오 장소 이름은 저장하지 않는다(NFR-11). */
     fun save(place: Place, alias: String) {
+        _savingPlace.value = null
         viewModelScope.launch {
             _saveMessage.value = favoriteRepository.add(place, alias = alias)
                 .fold(onSuccess = { "즐겨찾기에 저장했어요" }, onFailure = { "저장하지 못했어요. 다시 시도해 주세요" })

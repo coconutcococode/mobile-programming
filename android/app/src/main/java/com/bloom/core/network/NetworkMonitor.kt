@@ -23,12 +23,19 @@ class NetworkMonitor @Inject constructor(
     private val connectivity = context.getSystemService(ConnectivityManager::class.java)
 
     val isOnline: Flow<Boolean> = callbackFlow {
-        fun current(): Boolean = connectivity.getNetworkCapabilities(connectivity.activeNetwork)
-            ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+        // INTERNET = 인터넷용 네트워크라는 뜻일 뿐이라, 와이파이에 붙었지만 바깥 인터넷이 안 되는 경우도 참이다.
+        // VALIDATED = 안드로이드가 실제로 인터넷 접속을 확인했다는 뜻이라 둘 다 있어야 온라인으로 본다.
+        fun NetworkCapabilities?.isOnline(): Boolean =
+            this != null &&
+                hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+
+        fun current(): Boolean = connectivity.getNetworkCapabilities(connectivity.activeNetwork).isOnline()
 
         val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-                trySend(true)
+            // 연결 직후(onAvailable)에는 아직 확인 전일 수 있다. 확인 결과가 바뀔 때마다 이 함수가 불린다
+            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+                trySend(capabilities.isOnline())
             }
             override fun onLost(network: Network) {
                 trySend(current())

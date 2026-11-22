@@ -37,6 +37,7 @@ import com.kakao.vectormap.route.RouteLineOptions
 import com.kakao.vectormap.route.RouteLineSegment
 import com.kakao.vectormap.route.RouteLineStyle
 import com.kakao.vectormap.LatLng as KakaoLatLng
+import kotlin.math.roundToInt
 
 /** 지도 위 핀 하나. [label] 은 번호 핀("1"~"10", S-06)일 때만 */
 data class MapMarker(
@@ -82,6 +83,8 @@ fun KakaoMapView(
     markers: List<MapMarker> = emptyList(),
     routeSegments: List<MapRouteSegment> = emptyList(),
     myLocation: LatLng? = null,
+    // 값이 바뀔 때마다 center 로 카메라를 다시 옮긴다. center 가 같아도([내 위치 보기]를 다시 누름) 돌아오게 하려고 따로 받는다
+    recenterRequest: Int = 0,
     onMarkerClick: (String) -> Unit = {},
     onMapError: (Exception) -> Unit = {},
 ) {
@@ -131,18 +134,22 @@ fun KakaoMapView(
         }
     }
 
-    // 중심 좌표가 바뀌면 카메라 이동
-    LaunchedEffect(kakaoMap, center) {
+    // 중심 좌표가 바뀌거나 다시 옮겨 달라는 요청이 오면 카메라 이동
+    LaunchedEffect(kakaoMap, center, recenterRequest) {
         kakaoMap?.moveCamera(CameraUpdateFactory.newCenterPosition(KakaoLatLng.from(center.latitude, center.longitude)))
     }
 
-    // 핀 다시 그리기
+    // 핀 다시 그리기.
+    // MapPins 가 이미 화면 밀도(density)를 곱해 그림을 만들므로 SDK 의 dp 배율(setApplyDpScale, 기본 켜짐)은 끈다.
+    // 켜 두면 밀도를 한 번 더 곱해 고해상도 폰일수록 핀이 커진다. 끄면 글자 크기도 px 로 받으므로 밀도를 직접 곱한다.
     LaunchedEffect(kakaoMap, markers, myLocation) {
         val layer = kakaoMap?.labelManager?.layer ?: return@LaunchedEffect
+        val density = context.resources.displayMetrics.density
         layer.removeAll()
         markers.forEach { m ->
             val style = LabelStyle.from(MapPins.pin(context, m.selected))
-                .setTextStyles(if (m.selected) 32 else 26, Color.WHITE)
+                .setApplyDpScale(false)
+                .setTextStyles(((if (m.selected) 16 else 13) * density).roundToInt(), Color.WHITE)
             val options = LabelOptions.from(m.id, KakaoLatLng.from(m.point.latitude, m.point.longitude))
                 .setStyles(LabelStyles.from(style))
             m.label?.let { options.setTexts(LabelTextBuilder().setTexts(it)) }
@@ -151,7 +158,7 @@ fun KakaoMapView(
         myLocation?.let {
             layer.addLabel(
                 LabelOptions.from(MY_LOCATION_ID, KakaoLatLng.from(it.latitude, it.longitude))
-                    .setStyles(LabelStyles.from(LabelStyle.from(MapPins.myLocation(context)))),
+                    .setStyles(LabelStyles.from(LabelStyle.from(MapPins.myLocation(context)).setApplyDpScale(false))),
             )
         }
     }

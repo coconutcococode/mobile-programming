@@ -28,9 +28,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -75,8 +72,8 @@ fun HomeScreen(
     val myLocation by viewModel.myLocation.collectAsStateWithLifecycle()
     val locating by viewModel.locating.collectAsStateWithLifecycle()
     val saveMessage by viewModel.saveMessage.collectAsStateWithLifecycle()
-    // ☆를 누른 장소. 값이 있으면 이름 입력 창을 띄운다
-    var savingPlace by remember { mutableStateOf<Place?>(null) }
+    val savingPlace by viewModel.savingPlace.collectAsStateWithLifecycle()
+    val recenterRequest by viewModel.recenterRequest.collectAsStateWithLifecycle()
 
     // S-01-D1 위치 권한 요청. 정확한 위치(FINE)를 받아야 안내가 가능(NFR-08) → 대략적 위치만이면 S-08-P1
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
@@ -107,6 +104,7 @@ fun HomeScreen(
                 KakaoMapView(
                     center = myLocation ?: LatLng.SeoulCityHall,
                     myLocation = myLocation,
+                    recenterRequest = recenterRequest,
                     // TODO(트랙 A): 기본 장소 핀은 서버 연동 전까지 예시 장소(홍대 주변). 핀을 누르면 S-09
                     markers = SamplePlaces.all.map { MapMarker(it.id, it.location, selected = it.id == selectedPlace?.id) },
                     onMarkerClick = viewModel::onMapPlaceClick,
@@ -142,7 +140,7 @@ fun HomeScreen(
             place = place,
             isLoggedIn = isLoggedIn,
             onDirections = { viewModel.dismissPlace(); onPlaceSelected(it) },
-            onSave = { savingPlace = it; viewModel.dismissPlace() },
+            onSave = { viewModel.startSaving(it); viewModel.dismissPlace() },
             onLoginClick = { viewModel.dismissPlace(); onLoginRequired() },
             onDismiss = viewModel::dismissPlace,
         )
@@ -150,8 +148,8 @@ fun HomeScreen(
 
     savingPlace?.let { place ->
         SaveFavoriteDialog(
-            onSave = { alias -> viewModel.save(place, alias); savingPlace = null },
-            onDismiss = { savingPlace = null },
+            onSave = { alias -> viewModel.save(place, alias) },
+            onDismiss = viewModel::cancelSaving,
         )
     }
 }
