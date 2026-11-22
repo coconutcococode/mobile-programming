@@ -239,6 +239,18 @@ class GuideEngineTest {
         val riding = e.onBoardPressed(e.onNextPressed(e.start(0), 0), 0)
         assertEquals(GuideStepType.RIDING, e.type(riding))
         assertEquals(null, e.remainingStops(riding, 60_000))
+
+        // 시간 추정을 하지 않으므로 승차하자마자 하차로 넘어가지 않고, 다음 단계 버튼으로 넘긴다
+        assertEquals(GuideStepType.RIDING, e.type(e.onTick(riding, 1_000)))
+        assertEquals(GuideStepType.RIDING, e.type(e.onTick(riding, 60 * 60_000)))
+        assertTrue(e.needsManualAdvance(riding))
+        assertEquals(riding, e.onStationCorrected(riding, 2, 1_000))
+
+        val waiting = e.onNextPressed(riding, 2_000)
+        assertEquals(GuideStepType.WAIT_ALIGHTING, e.type(waiting))
+        assertFalse(e.isAtAlightingStation(waiting, 2_000))
+        assertTrue(e.needsManualAdvance(waiting))
+        assertEquals(GuideStepType.WAIT_ALIGHTING, e.type(e.onTick(waiting, 2_000 + 10 * 60_000))) // 5분 경과 자동 하차 없음
     }
 
     @Test
@@ -382,5 +394,30 @@ class GuideEngineTest {
         p = e.onTick(p, 601_000)
         assertEquals(GuideStepType.RIDING, e.type(p))                // 바로 하차 대기로 넘어가지 않음
         assertEquals(2, e.remainingStops(p, 601_000))
+    }
+
+    @Test
+    fun `안내 시작 전에 측정된 위치는 단계 전환에 쓰지 않는다`() {
+        val e = engineFor(busRoute)
+        var p = e.start(10_000)
+        p = e.onLocation(p, fix(stopA, 9_000))                    // 시작 1초 전 측정(예전에 받아 둔 위치)
+        assertEquals(GuideStepType.WALK, e.type(p))
+        p = e.onLocation(p, fix(stopA, 10_000))
+        assertEquals(GuideStepType.WAIT_BOARDING, e.type(p))
+    }
+
+    @Test
+    fun `단계 목록에서 단계를 골라도 위치 부정확 상태는 그대로 남는다`() {
+        val e = engineFor(busRoute)
+        var p = e.start(0)
+        for (t in 0..30_000L step 5_000) p = e.onLocation(p, fix(origin, t, accuracy = 120f))
+        assertTrue(p.isLocationInaccurate)
+
+        p = e.moveTo(p, 2, 31_000)
+        assertTrue(p.isLocationInaccurate)
+        assertEquals(0L, p.inaccurateSince)
+        assertEquals(0L, p.sessionStartedAt)
+        p = e.onLocation(p, fix(origin, 32_000))                  // 정확한 위치가 와야 해제
+        assertFalse(p.isLocationInaccurate)
     }
 }

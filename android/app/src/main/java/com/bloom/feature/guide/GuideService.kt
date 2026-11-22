@@ -18,18 +18,20 @@ import com.bloom.core.guide.GuideThresholds
 import com.bloom.core.location.LocationPermissions
 import com.bloom.core.location.LocationTracker
 import com.bloom.core.model.GuideSession
+import com.bloom.core.model.LocationFix
 import com.bloom.core.model.GuideStepType
 import com.bloom.data.repository.GuideSessionRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -114,13 +116,10 @@ class GuideService : LifecycleService() {
     }
 
     /** 단계에 맞는 간격으로 위치를 받는다. 간격이 바뀌면(지하철 차량 이동 30초 ↔ 5초) 다시 등록한다. */
-    @OptIn(ExperimentalCoroutinesApi::class)
     private fun followLocation() = lifecycleScope.launch {
         guideSessionRepository.session
             .map { it?.locationIntervalMillis }
-            .distinctUntilChanged()
-            .flatMapLatest { interval -> if (interval == null) emptyFlow() else locationTracker.locationUpdates(interval) }
-            .catch { /* 위치 등록 실패: 자동 전환 없이 단계 버튼으로 진행 */ }
+            .locationFixes(locationTracker)
             .collect { guideSessionRepository.onLocation(it) }
     }
 
@@ -159,3 +158,24 @@ class GuideService : LifecycleService() {
         }
     }
 }
+
+/**
+ * 간격이 바뀔 때마다 위치를 다시 등록해 받는다(null = 안내 없음).
+ * 등록이 실패해도 이 흐름 전체를 끝내지 않고, 같은 간격으로 [retryDelayMillis] 뒤 다시 등록한다.
+ * 그동안은 자동 전환 없이 단계 버튼으로 진행한다.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+internal fun Flow<Long?>.locationFixes(
+    tracker: LocationTracker,
+    retryDelayMillis: Long = GuideThresholds.LOCATION_RETRY_DELAY_MILLIS,
+): Flow<LocationFix> = distinctUntilChanged()
+    .flatMapLatest { interval ->
+        if (interval == null) {
+            emptyFlow()
+        } else {
+            tracker.locationUpdates(interval).retryWhen { _, _ ->
+                delay(retryDelayMillis)
+                true
+            }
+        }
+    }

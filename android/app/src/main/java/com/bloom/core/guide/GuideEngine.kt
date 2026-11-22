@@ -10,6 +10,7 @@ import com.bloom.core.model.TransitMode
 /**
  * 진행 중인 안내의 상태. 시각은 모두 기기 부팅 후 경과 시간(ms, [LocationFix.elapsedRealtimeMillis]와 같은 기준).
  *
+ * @param sessionStartedAt 이 안내(재탐색 포함)를 시작한 시각. 이보다 먼저 측정된 위치는 쓰지 않는다.
  * @param boardedAt 현재 대중교통 구간에 탄 시각. 지하철 현재 역 추정과 남은 정거장 계산에 쓴다.
  * @param isLocationInaccurate 부정확한 위치만 30초 이상 계속됨 → '위치가 부정확합니다' + '다음 단계' 버튼 (UC-01 A5)
  * @param isOffRoute 도보 중 경로선에서 50m 이상 떨어진 상태가 20초 이상 계속됨 → '재탐색' 버튼 (FR-06)
@@ -17,6 +18,7 @@ import com.bloom.core.model.TransitMode
 data class GuideProgress(
     val stepIndex: Int,
     val stepStartedAt: Long,
+    val sessionStartedAt: Long = 0L,
     val boardedAt: Long? = null,
     val inaccurateSince: Long? = null,
     val isLocationInaccurate: Boolean = false,
@@ -40,13 +42,15 @@ class GuideEngine(
         require(steps.isNotEmpty()) { "안내 단계가 비어 있음" }
     }
 
-    fun start(now: Long): GuideProgress = GuideProgress(stepIndex = 0, stepStartedAt = now)
+    fun start(now: Long): GuideProgress = GuideProgress(stepIndex = 0, stepStartedAt = now, sessionStartedAt = now)
 
     fun currentStep(progress: GuideProgress): GuideStep = steps[progress.stepIndex]
 
     /** 새 위치를 받았을 때. 정확도 50m를 넘거나 모르는 위치는 전환에 쓰지 않는다. */
     fun onLocation(progress: GuideProgress, fix: LocationFix): GuideProgress {
         val now = fix.elapsedRealtimeMillis
+        // 위치 서비스가 예전에 측정해 둔 위치나 재탐색 전에 쌓인 위치를 먼저 넘길 수 있다 → 이번 안내 시작 전 위치는 버린다
+        if (now < progress.sessionStartedAt) return progress
         val accuracy = fix.accuracyMeters
         if (accuracy == null || accuracy > GuideThresholds.MAX_ACCURACY_METERS) {
             val since = progress.inaccurateSince ?: now
@@ -70,9 +74,9 @@ class GuideEngine(
         val boardedAt = progress.boardedAt
         val reached = when (step.type) {
             GuideStepType.RIDING ->
-                segment.isSubway() && boardedAt != null && now >= alightSoonAt(segment!!, boardedAt)
+                segment.isTimedSubway() && boardedAt != null && now >= alightSoonAt(segment!!, boardedAt)
             GuideStepType.WAIT_ALIGHTING ->
-                segment.isSubway() && boardedAt != null &&
+                segment.isTimedSubway() && boardedAt != null &&
                     now >= estimatedArrivalAt(segment!!, boardedAt) + GuideThresholds.SUBWAY_ALIGHT_TIMEOUT_MILLIS
             GuideStepType.ALIGHTED -> now - progress.stepStartedAt >= GuideThresholds.ALIGHTED_HOLD_MILLIS
             else -> false
@@ -100,7 +104,14 @@ class GuideEngine(
                 progress.boardedAt?.takeIf { sameLeg } ?: now
             else -> null
         }
-        return GuideProgress(stepIndex = target, stepStartedAt = now, boardedAt = boardedAt)
+        // 위치 정확도 상태(B2)와 안내 시작 시각은 단계와 상관없으므로 그대로 두고, 단계에 딸린 값만 새로 잡는다
+        return progress.copy(
+            stepIndex = target,
+            stepStartedAt = now,
+            boardedAt = boardedAt,
+            offRouteSince = null,
+            isOffRoute = false,
+        )
     }
 
     /** '다음 단계' 버튼(위치가 부정확할 때 등 수동 전환). */
@@ -113,7 +124,7 @@ class GuideEngine(
     fun onStationCorrected(progress: GuideProgress, passedStops: Int, now: Long): GuideProgress {
         val step = currentStep(progress)
         val segment = step.segment
-        if (!segment.isSubway() || step.type !in setOf(GuideStepType.RIDING, GuideStepType.WAIT_ALIGHTING)) return progress
+        if (!segment.isTimedSubway() || step.type !in setOf(GuideStepType.RIDING, GuideStepType.WAIT_ALIGHTING)) return progress
         val stops = segment!!.stopsOrOne()
         val corrected = progress.copy(boardedAt = now - perStopMillis(segment) * passedStops.coerceIn(0, stops))
         val shouldBeRiding = step.type == GuideStepType.WAIT_ALIGHTING && now < alightSoonAt(segment, corrected.boardedAt!!)
@@ -124,7 +135,7 @@ class GuideEngine(
     fun isAtAlightingStation(progress: GuideProgress, now: Long): Boolean {
         val step = currentStep(progress)
         val boardedAt = progress.boardedAt ?: return false
-        return step.type == GuideStepType.WAIT_ALIGHTING && step.segment.isSubway() &&
+        return step.type == GuideStepType.WAIT_ALIGHTING && step.segment.isTimedSubway() &&
             now >= estimatedArrivalAt(step.segment!!, boardedAt)
     }
 
@@ -168,7 +179,10 @@ class GuideEngine(
             }
             // 지하철은 승차 버튼·시간으로 넘어가므로 좌표가 없어도 된다
             GuideStepType.WAIT_BOARDING -> segment.isBus() && segment!!.boardingPoint() == null
-            GuideStepType.RIDING, GuideStepType.WAIT_ALIGHTING -> segment.isBus() && segment!!.alightingPoint() == null
+            GuideStepType.RIDING, GuideStepType.WAIT_ALIGHTING ->
+                (segment.isBus() && segment!!.alightingPoint() == null) ||
+                    // 소요 시간을 모르는 지하철은 시간 추정을 못 하므로 손으로 넘긴다
+                    (segment.isSubway() && !segment.isTimedSubway())
             GuideStepType.ALIGHTED, GuideStepType.ARRIVED -> false
         }
     }
@@ -271,6 +285,9 @@ class GuideEngine(
 }
 
 private fun Segment?.isSubway() = this?.mode == TransitMode.SUBWAY
+
+/** 시간으로 현재 역을 추정할 수 있는 지하철 구간. 소요 시간이 0분이면 승차하자마자 하차로 계산되므로 제외한다. */
+private fun Segment?.isTimedSubway() = isSubway() && this!!.durationMinutes > 0
 private fun Segment?.isBus() = this?.mode == TransitMode.BUS
 private fun Segment.stopsOrOne() = stopCount.coerceAtLeast(1)
 private fun Segment.boardingPoint(): LatLng? = path.firstOrNull()

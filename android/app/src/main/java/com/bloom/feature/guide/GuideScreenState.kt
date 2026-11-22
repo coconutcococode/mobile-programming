@@ -69,9 +69,12 @@ fun stepTypeLabel(type: GuideStepType): String = when (type) {
  * '현재 역 고치기'(UC-01 A9)를 보여 줄지. 지하철은 지하에서 위치를 못 받아 시간으로 현재 역을 추정하므로,
  * 차량 이동·하차 대기 단계에서만 사용자가 실제 역으로 바로잡을 수 있게 한다.
  */
-fun canCorrectStation(session: GuideSession): Boolean =
-    session.currentStep.segment?.mode == TransitMode.SUBWAY &&
+fun canCorrectStation(session: GuideSession): Boolean {
+    val segment = session.currentStep.segment ?: return false
+    // 소요 시간을 모르면 시간 추정 자체를 하지 않으므로(다음 단계 버튼으로 진행) 고칠 것도 없다
+    return segment.mode == TransitMode.SUBWAY && segment.durationMinutes > 0 &&
         session.currentStep.type in setOf(GuideStepType.RIDING, GuideStepType.WAIT_ALIGHTING)
+}
 
 /**
  * 현재 역 고치기에서 고를 수 있는 역. 목록 순번 = 승차역에서 지나온 역 수(0 = 승차역, 마지막 = 하차역).

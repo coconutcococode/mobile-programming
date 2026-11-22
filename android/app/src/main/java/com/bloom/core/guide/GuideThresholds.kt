@@ -33,6 +33,9 @@ object GuideThresholds {
     /** 부정확한 위치만 이 시간 이상 계속되면 '위치가 부정확합니다' + '다음 단계' 버튼 (UC-01 A5) */
     const val INACCURATE_ALERT_MILLIS = 30_000L
 
+    /** 위치 등록이 실패했을 때 다시 등록하기까지 기다리는 시간 */
+    const val LOCATION_RETRY_DELAY_MILLIS = 10_000L
+
     /** 도보 중 경로선에서 이 거리 이상 떨어진 상태가 */
     const val OFF_ROUTE_METERS = 50.0
 

@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -264,7 +266,8 @@ fun GuideScreen(
             onDismissRequest = { showStationDialog = false },
             title = { Text("지금 있는 역을 골라 주세요") },
             text = {
-                Column {
+                // 역이 많으면(20정거장 등) 화면을 넘으므로 목록만 스크롤하고 '취소'는 밖에 둔다
+                Column(Modifier.verticalScroll(rememberScrollState())) {
                     stationChoices(stationSegment).forEachIndexed { passed, name ->
                         val isEstimated = passed == estimated
                         Text(

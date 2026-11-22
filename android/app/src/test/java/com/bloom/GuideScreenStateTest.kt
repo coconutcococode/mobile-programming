@@ -73,6 +73,7 @@ class GuideScreenStateTest {
         assertTrue(canCorrectStation(session(subway, at = GuideStepType.WAIT_ALIGHTING)))
         assertFalse(canCorrectStation(session(subway, at = GuideStepType.WAIT_BOARDING)))
         assertFalse(canCorrectStation(session(bus, at = GuideStepType.RIDING)))
+        assertFalse(canCorrectStation(session(subway.copy(durationMinutes = 0), at = GuideStepType.RIDING))) // 시간 추정을 안 함
     }
 
     @Test
