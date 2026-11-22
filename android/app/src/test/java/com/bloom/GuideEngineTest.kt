@@ -317,4 +317,24 @@ class GuideEngineTest {
         val e = GuideEngine(steps, dest)
         assertTrue(e.needsManualAdvance(e.start(0)))
     }
+
+    @Test
+    fun `연속 도보 중 한쪽 경로선이 없으면 합친 경로선을 비워 경로 이탈을 잘못 판단하지 않는다`() {
+        val mid = at(-150.0, 0.0)
+        val partial = route(
+            Segment(TransitMode.WALK, 2, "도보", "", "골목", distanceMeters = 150, path = listOf(origin, mid)),
+            Segment(TransitMode.WALK, 2, "도보", "", "A정류장", distanceMeters = 150), // 경로선 없음
+            Segment(TransitMode.BUS, 10, "7016", "A정류장", "B정류장", stopCount = 5, path = listOf(stopA, stopB)),
+            walk(stopB, dest, "목적지"),
+        )
+        val steps = partial.toGuideSteps()
+        assertEquals(emptyList<LatLng>(), steps.first().segment!!.path)
+
+        // 두 번째 도보 구간(경로선 없음)을 제대로 걷는 중: 첫 구간 끝에서 60m 떨어져도 이탈이 아니다
+        val e = GuideEngine(steps, dest)
+        var p = e.onLocation(e.start(0), fix(at(-90.0, 0.0), 0))
+        p = e.onLocation(p, fix(at(-90.0, 0.0), 25_000))
+        assertFalse(p.isOffRoute)
+        assertEquals(GuideStepType.WALK, e.type(p))
+    }
 }

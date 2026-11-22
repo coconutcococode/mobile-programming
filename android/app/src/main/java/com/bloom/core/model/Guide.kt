@@ -93,8 +93,13 @@ private fun List<Segment>.mergeConsecutiveWalks(): List<Segment> = fold(mutableL
             durationMinutes = last.durationMinutes + seg.durationMinutes,
             endName = seg.endName,
             distanceMeters = last.distanceMeters + seg.distanceMeters,
-            // 앞 구간 끝점과 뒤 구간 첫 점이 같으면 한 번만 넣는다
-            path = last.path + if (last.path.lastOrNull() == seg.path.firstOrNull()) seg.path.drop(1) else seg.path,
+            path = when {
+                // 한쪽이라도 경로선이 없으면 비운다. 일부만 남기면 엔진이 그걸 전체 경로로 믿고 경로 이탈을 잘못 판단한다
+                last.path.isEmpty() || seg.path.isEmpty() -> emptyList()
+                // 앞 구간 끝점과 뒤 구간 첫 점이 같으면 한 번만 넣는다
+                last.path.last() == seg.path.first() -> last.path + seg.path.drop(1)
+                else -> last.path + seg.path
+            },
         )
     } else {
         merged += seg
