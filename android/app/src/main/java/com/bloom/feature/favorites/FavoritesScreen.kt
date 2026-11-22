@@ -91,7 +91,9 @@ fun FavoritesScreen(
                     Icon(Icons.Filled.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Column(Modifier.padding(start = 12.dp)) {
                         Text(favorite.alias, style = MaterialTheme.typography.titleMedium)
-                        Text(favorite.searchKeyword, style = MaterialTheme.typography.bodySmall, color = BloomTheme.colors.textSecondary)
+                        if (favorite.searchKeyword.isNotBlank()) {
+                            Text(favorite.searchKeyword, style = MaterialTheme.typography.bodySmall, color = BloomTheme.colors.textSecondary)
+                        }
                     }
                 }
             }
