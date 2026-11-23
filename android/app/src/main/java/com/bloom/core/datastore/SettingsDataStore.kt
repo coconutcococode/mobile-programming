@@ -9,6 +9,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.retryWhen
 import java.io.IOException
@@ -46,6 +47,13 @@ class SettingsDataStore @Inject constructor(
             )
         }
 
+    /** 잠금화면 알림 표시 설정 안내(S-04-S1)를 이미 보여 줬는지. 한 번만 보여 준다. */
+    val lockScreenNoticeShown: Flow<Boolean> = store.data
+        .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
+        .map { it[Keys.LOCK_SCREEN_NOTICE_SHOWN] ?: false }
+
+    suspend fun setLockScreenNoticeShown() = write { it[Keys.LOCK_SCREEN_NOTICE_SHOWN] = true }
+
     suspend fun setDarkMode(enabled: Boolean) = write { it[Keys.DARK_MODE] = enabled }
 
     suspend fun setAlightVibration(enabled: Boolean) = write { it[Keys.ALIGHT_VIBRATION] = enabled }
@@ -66,5 +74,6 @@ class SettingsDataStore @Inject constructor(
     private object Keys {
         val DARK_MODE = booleanPreferencesKey("dark_mode")
         val ALIGHT_VIBRATION = booleanPreferencesKey("alight_vibration")
+        val LOCK_SCREEN_NOTICE_SHOWN = booleanPreferencesKey("lock_screen_notice_shown")
     }
 }
