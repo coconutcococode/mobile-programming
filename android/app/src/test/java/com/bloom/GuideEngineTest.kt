@@ -124,6 +124,7 @@ class GuideEngineTest {
         assertEquals(2, e.remainingStops(p, boarded + 5 * 60_000))
         p = e.onTick(p, boarded + 6 * 60_000)
         assertEquals(GuideStepType.WAIT_ALIGHTING, e.type(p))
+        assertEquals(1, e.remainingStops(p, boarded + 6 * 60_000))
 
         assertFalse(e.isAtAlightingStation(p, boarded + 8 * 60_000 - 1))
         assertTrue(e.isAtAlightingStation(p, boarded + 8 * 60_000))
@@ -336,5 +337,50 @@ class GuideEngineTest {
         p = e.onLocation(p, fix(at(-90.0, 0.0), 25_000))
         assertFalse(p.isOffRoute)
         assertEquals(GuideStepType.WALK, e.type(p))
+    }
+
+    @Test
+    fun `버스가 위치로 먼저 하차 대기로 넘어가면 남은 정거장은 시간 추정과 상관없이 1이다`() {
+        val e = engineFor(busRoute)
+        var p = e.onBoardPressed(e.onNextPressed(e.start(0), 0), 0)
+        assertEquals(5, e.remainingStops(p, 10_000))
+        assertEquals(2, e.remainingStops(p, 9 * 60_000))          // 시간상 1이어도 차량 이동 중엔 2
+        p = e.onLocation(p, fix(at(1700.0, 0.0), 30_000))         // 하차 지점 300m → 하차 대기
+        assertEquals(GuideStepType.WAIT_ALIGHTING, e.type(p))
+        assertEquals(1, e.remainingStops(p, 30_000))
+    }
+
+    @Test
+    fun `부정확한 위치 뒤로 위치가 끊겨도 30초가 지나면 시간 확인만으로 부정확 표시`() {
+        val e = engineFor(busRoute)
+        var p = e.onLocation(e.start(0), fix(origin, 1_000, accuracy = 120f))
+        p = e.onTick(p, 30_000)
+        assertEquals(false, p.isLocationInaccurate)
+        p = e.onTick(p, 31_000)
+        assertEquals(true, p.isLocationInaccurate)
+        p = e.onLocation(p, fix(origin, 32_000))                 // 정확한 위치가 오면 해제
+        assertEquals(false, p.isLocationInaccurate)
+        assertEquals(false, e.onTick(p, 90_000).isLocationInaccurate)
+    }
+
+    @Test
+    fun `단계 목록에서 다른 대중교통 구간으로 옮기면 승차 시각을 지금으로 새로 잡는다`() {
+        val transfer = route(
+            walk(origin, stopA, "A역"),
+            Segment(TransitMode.SUBWAY, 6, "2호선", "A역", "B역", stopCount = 3, path = listOf(stopA, stopB)),
+            Segment(TransitMode.SUBWAY, 4, "6호선", "B역", "C역", stopCount = 2, path = listOf(stopB, dest)),
+        )
+        val e = engineFor(transfer)
+        var p = e.onBoardPressed(e.onNextPressed(e.start(0), 0), 0) // 2호선 차량 이동, 승차 0초
+        assertEquals(0L, p.boardedAt)
+
+        p = e.moveTo(p, 3, 60_000)                                   // 같은 구간(2호선 하차 대기) → 승차 시각 유지
+        assertEquals(0L, p.boardedAt)
+
+        p = e.moveTo(p, 5, 600_000)                                  // 6호선 차량 이동 → 지금이 승차 시각
+        assertEquals(600_000L, p.boardedAt)
+        p = e.onTick(p, 601_000)
+        assertEquals(GuideStepType.RIDING, e.type(p))                // 바로 하차 대기로 넘어가지 않음
+        assertEquals(2, e.remainingStops(p, 601_000))
     }
 }
