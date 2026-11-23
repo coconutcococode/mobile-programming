@@ -31,7 +31,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -84,8 +85,9 @@ fun HomeScreen(
     val savingPlace by viewModel.savingPlace.collectAsStateWithLifecycle()
     val recenterRequest by viewModel.recenterRequest.collectAsStateWithLifecycle()
     val recents by viewModel.recents.collectAsStateWithLifecycle()
-    // 권한 창이 떠 있는 동안 고른 최근 목적지. null 이면 [내 위치 보기]에서 연 권한 창이다
-    var pendingRecent by remember { mutableStateOf<RecentDestination?>(null) }
+    // 권한 창이 떠 있는 동안 고른 최근 목적지. null 이면 [내 위치 보기]에서 연 권한 창
+    // rememberSaveable: 권한 창이 떠 있는 동안 화면이 다시 만들어져도(회전 등) 고른 목적지 유지
+    var pendingRecent by rememberSaveable(stateSaver = RecentDestinationSaver) { mutableStateOf<RecentDestination?>(null) }
 
     // S-01-D1 위치 권한 요청. 정확한 위치(FINE)를 받아야 안내가 가능(NFR-08) → 대략적 위치만이면 S-08-P1
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
@@ -221,7 +223,7 @@ private fun HomeSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(Icons.Outlined.History, contentDescription = null, tint = BloomTheme.colors.textSecondary)
-                // 장소명은 저장할 수 없어서(카카오 정책) 사용자가 입력한 검색어를 보여 준다
+                // 장소명은 저장 불가(카카오 정책)라 사용자가 입력한 검색어 표시
                 Text(recent.query, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 12.dp))
             }
         }
@@ -247,3 +249,9 @@ private fun SearchBarStub(onClick: () -> Unit) {
         }
     }
 }
+
+/** rememberSaveable 이 [RecentDestination] 을 문자열 2개로 저장했다가 되살리는 규칙. null 은 저장하지 않음 */
+private val RecentDestinationSaver = listSaver<RecentDestination?, String>(
+    save = { r -> if (r == null) emptyList() else listOf(r.placeId, r.query) },
+    restore = { if (it.size == 2) RecentDestination(it[0], it[1]) else null },
+)

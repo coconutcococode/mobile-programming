@@ -9,6 +9,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.Transaction
 import androidx.room.Upsert
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
@@ -89,13 +90,28 @@ interface RecentDestinationDao {
     @Query("SELECT * FROM recent_destinations ORDER BY savedAtMillis DESC LIMIT :limit")
     fun observe(limit: Int): Flow<List<RecentDestinationEntity>>
 
-    /** 같은 placeId 면 검색어·시각만 새로 덮어써서 맨 위로 올린다. */
+    /** 같은 placeId 면 검색어와 시각만 덮어써서 맨 위로 올림 */
     @Upsert
     suspend fun upsert(entity: RecentDestinationEntity)
 
-    /** 최신 [keep]개만 남기고 지운다. */
+    /** 최신 [keep]개만 남기고 삭제 */
     @Query("DELETE FROM recent_destinations WHERE placeId NOT IN (SELECT placeId FROM recent_destinations ORDER BY savedAtMillis DESC LIMIT :keep)")
     suspend fun trim(keep: Int)
+
+    @Query("SELECT MAX(savedAtMillis) FROM recent_destinations")
+    suspend fun latestSavedAt(): Long?
+
+    /**
+     * 맨 위에 저장 후 [keep]개만 유지.
+     * @Transaction: 저장과 자르기를 한 묶음으로 처리. 중간에 취소되면 둘 다 롤백(21개가 남는 일 방지).
+     * 시각은 '지금'과 '가장 최근 시각 + 1' 중 큰 값: 기기 시계가 뒤로 가도 방금 고른 곳이 맨 위.
+     */
+    @Transaction
+    suspend fun saveOnTop(placeId: String, query: String, now: Long, keep: Int) {
+        val savedAt = latestSavedAt()?.let { maxOf(now, it + 1) } ?: now
+        upsert(RecentDestinationEntity(placeId, query, savedAt))
+        trim(keep)
+    }
 }
 
 @Database(
@@ -110,8 +126,8 @@ abstract class BloomDatabase : RoomDatabase() {
 }
 
 /**
- * 버전 1 → 2: 최근 목적지 표 추가. 이미 앱을 설치한 폰의 즐겨찾기 표를 지우지 않으려고
- * '처음부터 다시 만들기' 대신 새 표만 만드는 이전 규칙(Migration)을 둔다.
+ * 버전 1 → 2: 최근 목적지 표 추가. 이미 앱을 설치한 폰의 즐겨찾기 표를 지우지 않도록
+ * '처음부터 다시 만들기' 대신 새 표만 만드는 이전 규칙(Migration).
  */
 val MIGRATION_1_2 = object : Migration(1, 2) {
     override fun migrate(db: SupportSQLiteDatabase) {

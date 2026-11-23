@@ -55,7 +55,20 @@ class SearchViewModelTest {
 
         advanceUntilIdle()
         val state = viewModel.results.value
-        assertTrue(state is UiState.Success && state.data.isNotEmpty() && state.data.size <= PlaceLimits.MAX_AUTOCOMPLETE)
+        assertTrue(state is UiState.Success && state.data.places.isNotEmpty() && state.data.places.size <= PlaceLimits.MAX_AUTOCOMPLETE)
+    }
+
+    @Test
+    fun `결과가 뜬 뒤 검색어를 바꿔도 지금 보이는 결과는 그 결과를 받아 온 검색어와 짝을 이룬다`() = runTest(dispatcher) {
+        backgroundScope.launch { viewModel.results.collect {} }
+
+        viewModel.onQueryChange("홍")
+        advanceUntilIdle()
+        // 0.3초가 지나기 전(새 검색 전)에는 '홍' 결과가 그대로 남아 있음
+        viewModel.onQueryChange("홍익")
+
+        val state = viewModel.results.value
+        assertTrue(state is UiState.Success && state.data.query == "홍")
     }
 
     @Test

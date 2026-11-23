@@ -29,6 +29,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,6 +50,7 @@ import com.bloom.core.designsystem.toUserMessage
 import com.bloom.core.location.LocationPermissions
 import com.bloom.core.model.Place
 import com.bloom.core.model.RecentDestination
+import kotlinx.coroutines.launch
 
 /**
  * S-01 검색 상태(하단 탭 숨김). 들어오면 바로 입력창에 커서.
@@ -65,13 +69,15 @@ fun SearchScreen(
     val results by viewModel.results.collectAsStateWithLifecycle()
     val recents by viewModel.recents.collectAsStateWithLifecycle()
     val focusRequester = remember { FocusRequester() }
-    // 권한 창이 떠 있는 동안 고른 목적지를 들고 있다가, 정확한 위치를 허용하면 S-02 로 넘긴다
-    var pending by remember { mutableStateOf<ChosenDestination?>(null) }
+    val scope = rememberCoroutineScope()
+    // 권한 창이 떠 있는 동안 고른 목적지. 정확한 위치를 허용하면 S-02 로 전달
+    // rememberSaveable: 권한 창이 떠 있는 동안 화면이 다시 만들어져도(회전 등) 고른 목적지 유지
+    var pending by rememberSaveable(stateSaver = ChosenDestinationSaver) { mutableStateOf<ChosenDestination?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         val target = pending ?: return@rememberLauncherForActivityResult
         pending = null
-        // 대략적 위치만 허용해도 경로 출발지로 쓸 수 없으므로(NFR-08) 정확한 위치 여부만 본다
+        // 대략적 위치로는 경로 출발지로 쓸 수 없어서(NFR-08) 정확한 위치 여부만 확인
         if (result[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
             onDestinationChosen(target.placeId, target.displayName, target.typedQuery)
         } else {
@@ -79,14 +85,16 @@ fun SearchScreen(
         }
     }
 
-    // 검색 결과와 최근 목적지 모두 여기로: 최근 목적지 저장 → 위치 권한 확인(S-01-D1) → S-02
+    // 검색 결과와 최근 목적지 모두 여기로: 최근 목적지 저장(끝날 때까지 기다림) → 위치 권한 확인(S-01-D1) → S-02
     val choose: (ChosenDestination) -> Unit = { target ->
-        viewModel.rememberChoice(target.placeId, target.typedQuery)
-        if (viewModel.hasLocationPermission()) {
-            onDestinationChosen(target.placeId, target.displayName, target.typedQuery)
-        } else {
-            pending = target
-            permissionLauncher.launch(LocationPermissions.REQUIRED)
+        scope.launch {
+            viewModel.rememberChoice(target.placeId, target.typedQuery)
+            if (viewModel.hasLocationPermission()) {
+                onDestinationChosen(target.placeId, target.displayName, target.typedQuery)
+            } else {
+                pending = target
+                permissionLauncher.launch(LocationPermissions.REQUIRED)
+            }
         }
     }
 
@@ -110,7 +118,7 @@ fun SearchScreen(
         }
 
         when (val state = results) {
-            // 최근 목적지는 장소 이름을 저장하지 않으므로 표시 이름도 검색어를 쓴다
+            // 최근 목적지는 장소 이름이 없어서 표시 이름도 검색어 사용
             null -> RecentList(recents, onClick = { choose(ChosenDestination(it.placeId, it.query, it.query)) })
             UiState.Loading -> SkeletonList(Modifier.padding(BloomDimens.ScreenHorizontal), rows = 5, rowHeight = 56.dp)
             UiState.Empty -> EmptyState(title = "검색 결과가 없습니다", description = "다른 이름이나 주소로 검색해 보세요")
@@ -120,9 +128,10 @@ fun SearchScreen(
                 modifier = Modifier.padding(BloomDimens.ScreenHorizontal),
             )
             is UiState.Success -> LazyColumn {
-                items(state.data, key = { it.id }) { place ->
-                    // 검색어 자리에는 장소 이름이 아니라 사용자가 입력한 글자를 넘긴다(팀 합의 11/22)
-                    PlaceRow(place, onClick = { choose(ChosenDestination(place.id, place.name, query.trim())) })
+                items(state.data.places, key = { it.id }) { place ->
+                    // 검색어 자리에는 장소 이름 대신 사용자가 입력한 글자 전달.
+                    // 입력창의 지금 글자가 아니라 이 결과를 받아 온 검색어 사용(결과가 뜬 뒤 글자를 바꾸고 고르는 경우 대비)
+                    PlaceRow(place, onClick = { choose(ChosenDestination(place.id, place.name, state.data.query)) })
                 }
             }
         }
@@ -131,6 +140,12 @@ fun SearchScreen(
 
 /** 고른 목적지. [typedQuery] 는 사용자가 입력한 글자(최근 목적지면 저장해 둔 검색어). */
 private data class ChosenDestination(val placeId: String, val displayName: String, val typedQuery: String)
+
+/** rememberSaveable 이 [ChosenDestination] 을 문자열 3개로 저장했다가 되살리는 규칙. null 은 저장하지 않음 */
+private val ChosenDestinationSaver = listSaver<ChosenDestination?, String>(
+    save = { d -> if (d == null) emptyList() else listOf(d.placeId, d.displayName, d.typedQuery) },
+    restore = { if (it.size == 3) ChosenDestination(it[0], it[1], it[2]) else null },
+)
 
 @Composable
 private fun RecentList(recents: List<RecentDestination>, onClick: (RecentDestination) -> Unit) {
@@ -152,7 +167,7 @@ private fun RecentList(recents: List<RecentDestination>, onClick: (RecentDestina
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(Icons.Outlined.History, contentDescription = null, tint = BloomTheme.colors.textSecondary)
-                // 장소명은 저장할 수 없어서(카카오 정책) 사용자가 입력한 검색어를 보여 준다
+                // 장소명은 저장 불가(카카오 정책)라 사용자가 입력한 검색어 표시
                 Text(recent.query, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 12.dp))
             }
         }
