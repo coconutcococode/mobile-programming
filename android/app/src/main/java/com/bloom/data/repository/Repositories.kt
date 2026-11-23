@@ -5,6 +5,7 @@ import com.bloom.core.model.ArrivalInfo
 import com.bloom.core.model.Favorite
 import com.bloom.core.model.GuideSession
 import com.bloom.core.model.LatLng
+import com.bloom.core.model.LocationFix
 import com.bloom.core.model.NearbySort
 import com.bloom.core.model.Place
 import com.bloom.core.model.PlaceCategory
@@ -71,11 +72,35 @@ interface AuthRepository {
  */
 interface GuideSessionRepository {
     val session: StateFlow<GuideSession?>
+
+    /** 안내 시작. 진행 중인 안내가 있으면 새 경로로 바꾼다(재탐색). */
     fun start(route: RouteCandidate)
-    fun moveToStep(index: Int)
+
+    /** 위치 서비스가 받은 위치 → 단계 자동 전환 (분석서 표 2-1) */
+    fun onLocation(fix: LocationFix)
+
+    /** 시간으로 바뀌는 전환(지하철 추정·하차 완료 표시). 위치 서비스가 1초마다 부른다 */
+    fun onTick()
+
+    /** '승차' 버튼 */
+    fun board()
+
+    /** '하차 완료' 버튼 */
+    fun alight()
+
+    /** '다음 단계' 버튼 */
     fun next()
+
+    /** 단계 목록에서 특정 단계를 골라 이동 */
+    fun moveToStep(index: Int)
+
+    /** 지하철 현재 역 보정 — 승차역에서 지나온 역 수 (UC-01 A9) */
+    fun correctStation(passedStops: Int)
+
     fun updateArrival(arrival: ArrivalInfo?)
-    fun setOffRoute(offRoute: Boolean)
+
+    /** '재탐색' — [from]에서 같은 목적지로 다시 검색해 가장 빠른 경로로 안내를 바꾼다(FR-06). 실패하면 false */
+    suspend fun reroute(from: LatLng): Boolean
 
     /** 안내 종료 — 경로 데이터를 메모리에서 폐기한다(NFR-11). */
     fun end()

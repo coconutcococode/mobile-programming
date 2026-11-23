@@ -22,9 +22,12 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 
-/** 앱 최상위: 하단 탭 4개 + 탭별 스택(UI 설계서 2.1). */
+/**
+ * 앱 최상위: 하단 탭 4개 + 탭별 스택(UI 설계서 2.1).
+ * @param openGuideRequest 안내 알림을 누를 때마다 바뀌는 값. 바뀌면 안내 진행(S-04)으로 간다.
+ */
 @Composable
-fun BloomApp() {
+fun BloomApp(openGuideRequest: Int = 0) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val destination = backStackEntry?.destination
@@ -45,7 +48,11 @@ fun BloomApp() {
             ?.let { currentTab = it }
     }
 
-    // S-04 안내 진행 중과 검색 상태에서는 하단 탭을 숨긴다.
+    LaunchedEffect(openGuideRequest) {
+        if (openGuideRequest > 0) navController.navigate(GuideRoute) { launchSingleTop = true }
+    }
+
+    // S-04 안내 진행 중, 검색 상태에서 하단 탭 숨김
     val showBottomBar = destination?.hasRoute(GuideRoute::class) != true && destination?.hasRoute(SearchRoute::class) != true
 
     Scaffold(

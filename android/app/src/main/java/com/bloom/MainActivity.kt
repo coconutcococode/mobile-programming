@@ -1,5 +1,6 @@
 package com.bloom
 
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -15,6 +16,7 @@ import com.bloom.core.datastore.SettingsDataStore
 import com.bloom.core.designsystem.theme.BloomTheme
 import com.bloom.core.navigation.BloomApp
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.MutableStateFlow
 import javax.inject.Inject
 
 // 3버튼 내비게이션일 때 바 뒤에 깔리는 반투명 막 (androidx.activity 기본값과 같은 값)
@@ -26,8 +28,12 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var settingsDataStore: SettingsDataStore
 
+    /** 안내 알림을 누를 때마다 1씩 오른다 → BloomApp 이 안내 진행(S-04)으로 이동 */
+    private val openGuideRequests = MutableStateFlow(0)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) handleIntent(intent) // 화면 회전 등으로 다시 만들어질 때는 다시 이동하지 않는다
         enableEdgeToEdge()
         setContent {
             val settings by settingsDataStore.settings.collectAsStateWithLifecycle(initialValue = AppSettings())
@@ -42,9 +48,24 @@ class MainActivity : ComponentActivity() {
                 onDispose {}
             }
 
+            val openGuideRequest by openGuideRequests.collectAsStateWithLifecycle()
             BloomTheme(darkTheme = darkTheme) {
-                BloomApp()
+                BloomApp(openGuideRequest = openGuideRequest)
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        if (intent?.action == ACTION_OPEN_GUIDE) openGuideRequests.value++
+    }
+
+    companion object {
+        const val ACTION_OPEN_GUIDE = "com.bloom.OPEN_GUIDE"
     }
 }

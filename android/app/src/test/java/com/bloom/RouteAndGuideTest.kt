@@ -47,7 +47,7 @@ class RouteAndGuideTest {
     }
 
     @Test
-    fun `대중교통 구간은 승차대기-이동-하차대기 3단계, 마지막은 도착`() {
+    fun `대중교통 구간은 승차대기-이동-하차대기-하차완료 4단계, 마지막은 도착`() {
         val route = candidate(
             "r", 18, 0, 780,
             listOf(
@@ -60,7 +60,7 @@ class RouteAndGuideTest {
         assertEquals(
             listOf(
                 GuideStepType.WALK,
-                GuideStepType.WAIT_BOARDING, GuideStepType.RIDING, GuideStepType.WAIT_ALIGHTING,
+                GuideStepType.WAIT_BOARDING, GuideStepType.RIDING, GuideStepType.WAIT_ALIGHTING, GuideStepType.ALIGHTED,
                 GuideStepType.WALK,
                 GuideStepType.ARRIVED,
             ),
@@ -80,7 +80,7 @@ class RouteAndGuideTest {
 
     @Test
     fun `안내 세션은 끝 단계를 넘지 않고, 종료하면 폐기된다`() {
-        val repo = InMemoryGuideSessionRepository(FakeRouteRepository())
+        val repo = InMemoryGuideSessionRepository(FakeRouteRepository()) { 0L }
         val route = candidate("r", 10, 0, 500, listOf(Segment(TransitMode.WALK, 10, "도보", "", "목적지", distanceMeters = 500)))
         repo.start(route)
         repeat(10) { repo.next() }

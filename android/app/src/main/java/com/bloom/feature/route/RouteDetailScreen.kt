@@ -1,5 +1,11 @@
 package com.bloom.feature.route
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,7 +18,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -61,7 +69,8 @@ class RouteDetailViewModel @Inject constructor(
 }
 
 /**
- * S-03 경로 상세. TODO(트랙 A): 지도 위 경로선, 즐겨찾기 별, S-03-D1 알림 권한 요청(첫 안내 시작 시).
+ * S-03 경로 상세. '안내 시작' 때 알림 권한이 없으면 먼저 묻는다(S-03-D1).
+ * TODO(트랙 B): 지도 위 경로선(지도 부품 나온 뒤), 즐겨찾기 별.
  */
 @Composable
 fun RouteDetailScreen(
@@ -72,6 +81,10 @@ fun RouteDetailScreen(
 ) {
     val hasActiveGuide by viewModel.hasActiveGuide.collectAsStateWithLifecycle()
     val candidate = viewModel.candidate
+    val context = LocalContext.current
+    val startGuide = { if (viewModel.startGuide()) onGuideStarted() }
+    // S-03-D1: 허용·거절과 상관없이 안내는 시작한다. 거절하면 안내 화면 상단에 알림 꺼짐 배너(S-04-B1)
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { startGuide() }
 
     Scaffold(
         topBar = { BloomTopBar(title = "경로 상세", onBack = onBack) },
@@ -83,7 +96,13 @@ fun RouteDetailScreen(
                     text = "안내 시작",
                     enabled = !hasActiveGuide,
                     large = true,
-                    onClick = { if (viewModel.startGuide()) onGuideStarted() },
+                    onClick = {
+                        if (needsNotificationPermission(context)) {
+                            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            startGuide()
+                        }
+                    },
                     modifier = Modifier.padding(BloomDimens.ScreenHorizontal),
                 )
             }
@@ -115,3 +134,11 @@ fun RouteDetailScreen(
         }
     }
 }
+
+/**
+ * 안드로이드 13부터는 알림 권한이 있어야 잠금화면 안내(S-05)가 보인다.
+ * 한 번 거절한 뒤에도 묻지만, 시스템이 더 묻지 않기로 한 상태면 창 없이 바로 결과가 와서 안내가 그대로 시작된다.
+ */
+private fun needsNotificationPermission(context: Context): Boolean =
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
