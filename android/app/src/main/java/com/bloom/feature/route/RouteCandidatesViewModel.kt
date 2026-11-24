@@ -49,6 +49,10 @@ class RouteCandidatesViewModel @Inject constructor(
 
     private val candidates = MutableStateFlow<UiState<List<RouteCandidate>>>(UiState.Loading)
 
+    /** 카카오맵 길찾기용: 이번 검색에서 받은 현재 위치·목적지 좌표. 메모리에만 두고 다시 검색하면 새로 채운다. */
+    private var searchedOrigin: LatLng? = null
+    private var searchedDestination: LatLng? = null
+
     val uiState: StateFlow<UiState<List<RouteCandidate>>> =
         combine(candidates, _sort) { state, sort ->
             if (state is UiState.Success) state.copy(data = state.data.sortedFor(sort)) else state
@@ -61,14 +65,18 @@ class RouteCandidatesViewModel @Inject constructor(
     fun load() {
         viewModelScope.launch {
             candidates.value = UiState.Loading
+            searchedOrigin = null
+            searchedDestination = null
             // TODO(트랙 A): 위치 권한 흐름(S-01-D1 → 거절 시 S-08-P1). 지금은 권한이 없으면 서울시청 기준.
             val currentLocation = locationTracker.currentLocation()
             val origin = currentLocation ?: LatLng.SeoulCityHall
             _originLabel.value = if (currentLocation != null) ORIGIN_CURRENT_LOCATION else ORIGIN_FALLBACK
+            searchedOrigin = currentLocation
             val destination = placeRepository.getPlace(args.destinationPlaceId).getOrElse {
                 candidates.value = UiState.Error(it.toAppError())
                 return@launch
             }
+            searchedDestination = destination.location
             candidates.value = routeRepository.searchRoutes(origin, destination).fold(
                 onSuccess = { list ->
                     if (list.isEmpty()) UiState.Empty else UiState.Success(list.take(RouteLimits.MAX_CANDIDATES))
@@ -77,6 +85,10 @@ class RouteCandidatesViewModel @Inject constructor(
             )
         }
     }
+
+    /** S-02-4: 경로를 못 불러왔을 때 카카오맵에서 이어서 찾을 링크. */
+    fun kakaoMapDirections(): KakaoMapDirections =
+        kakaoMapDirections(args.destinationPlaceId, searchedOrigin, searchedDestination)
 
     fun onSortChange(type: RouteSortType) {
         _sort.value = type
