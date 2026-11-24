@@ -18,6 +18,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -58,6 +60,9 @@ data class MapRouteSegment(
 
 private const val MY_LOCATION_ID = "me"
 
+/** fitPoints 로 카메라를 맞출 때 지도 가장자리 여백(핀이 잘리지 않게) */
+private val FIT_PADDING = 48.dp
+
 /**
  * 이동 수단별 경로선 모양(UI 설계서 3장 색). 구간 막대(경로 후보 화면)와 같은 짝으로 맞췄다:
  * 도보 = 중간 파랑 · 가는 선, 버스 = 보조 하늘 + 네이비 테두리(밝은 지도에서도 보이게), 지하철 = 네이비 + 흰 테두리.
@@ -85,6 +90,8 @@ fun KakaoMapView(
     myLocation: LatLng? = null,
     // 값이 바뀔 때마다 center 로 카메라를 다시 옮긴다. center 가 같아도([내 위치 보기]를 다시 누름) 돌아오게 하려고 따로 받는다
     recenterRequest: Int = 0,
+    // 점이 2개 이상이면 center 대신 이 점들이 모두 보이게 카메라를 맞춘다(경로 상세에서 경로 전체 보기). 비우면 기존처럼 center
+    fitPoints: List<LatLng> = emptyList(),
     onMarkerClick: (String) -> Unit = {},
     onMapError: (Exception) -> Unit = {},
 ) {
@@ -139,9 +146,16 @@ fun KakaoMapView(
         }
     }
 
-    // 중심 좌표가 바뀌거나 다시 옮겨 달라는 요청이 오면 카메라 이동
-    LaunchedEffect(kakaoMap, center, recenterRequest) {
-        kakaoMap?.moveCamera(CameraUpdateFactory.newCenterPosition(KakaoLatLng.from(center.latitude, center.longitude)))
+    // 중심 좌표가 바뀌거나 다시 옮겨 달라는 요청이 오면 카메라 이동. fitPoints 가 있으면 그 점들이 다 보이게 맞춘다
+    val fitPaddingPx = with(LocalDensity.current) { FIT_PADDING.roundToPx() }
+    LaunchedEffect(kakaoMap, center, recenterRequest, fitPoints) {
+        val map = kakaoMap ?: return@LaunchedEffect
+        if (fitPoints.size >= 2) {
+            val points = fitPoints.map { KakaoLatLng.from(it.latitude, it.longitude) }.toTypedArray()
+            map.moveCamera(CameraUpdateFactory.fitMapPoints(points, fitPaddingPx))
+        } else {
+            map.moveCamera(CameraUpdateFactory.newCenterPosition(KakaoLatLng.from(center.latitude, center.longitude)))
+        }
     }
 
     // 핀 다시 그리기.
