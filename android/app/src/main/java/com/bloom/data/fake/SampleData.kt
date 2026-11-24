@@ -58,5 +58,26 @@ object SamplePlaces {
         walkMinutes = 6,
     )
 
-    val all = listOf(HongdaeStreet, School, BrewingLab, ConvenienceStore, Restaurant, Culture)
+    /** 주변(S-06) 번호 핀 확인용 추가 장소. 이름은 지어낸 값 */
+    private val moreNearby = listOf(
+        nearby("sample-cafe-2", "카페 모퉁이", LatLng(37.5593, 126.9228), PlaceCategory.CAFE, 220),
+        nearby("sample-cafe-3", "느린 오후 커피", LatLng(37.5612, 126.9262), PlaceCategory.CAFE, 310),
+        nearby("sample-cafe-4", "연남 로스터스", LatLng(37.5584, 126.9247), PlaceCategory.CAFE, 380),
+        nearby("sample-cvs-2", "동교 편의점", LatLng(37.5580, 126.9236), PlaceCategory.CONVENIENCE_STORE, 260),
+        nearby("sample-food-2", "골목 국수집", LatLng(37.5606, 126.9218), PlaceCategory.RESTAURANT, 170),
+        nearby("sample-food-3", "연남 분식", LatLng(37.5589, 126.9255), PlaceCategory.RESTAURANT, 340),
+    )
+
+    val all = listOf(HongdaeStreet, School, BrewingLab, ConvenienceStore, Restaurant, Culture) + moreNearby
+
+    /** 도보 1분 = 약 67m 기준 */
+    private fun nearby(id: String, name: String, location: LatLng, category: PlaceCategory, meters: Int) = Place(
+        id = id,
+        name = name,
+        address = "서울 마포구 연남동 000",
+        location = location,
+        category = category,
+        distanceMeters = meters,
+        walkMinutes = (meters + 66) / 67,
+    )
 }

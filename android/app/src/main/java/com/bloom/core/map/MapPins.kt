@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.Typeface
 import androidx.core.graphics.createBitmap
 
 /**
@@ -17,7 +18,8 @@ object MapPins {
 
     private fun dp(context: Context, v: Float) = v * context.resources.displayMetrics.density
 
-    fun pin(context: Context, selected: Boolean): Bitmap = cache.getOrPut(if (selected) "pinSelected" else "pin") {
+    /** [number] 가 있으면 원 가운데에 흰 번호(주변 S-06 번호 핀 = 목록 번호) */
+    fun pin(context: Context, selected: Boolean, number: String? = null): Bitmap = cache.getOrPut("pin-$selected-$number") {
         val w = dp(context, if (selected) 34f else 26f)
         val h = w * 1.33f
         val bmp = createBitmap(w.toInt(), h.toInt())
@@ -38,6 +40,16 @@ object MapPins {
         canvas.drawPath(tail, fill)
         canvas.drawCircle(r, r, r - ring.strokeWidth, fill)
         canvas.drawCircle(r, r, r - ring.strokeWidth, ring)
+        number?.let {
+            val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = 0xFFFFFFFF.toInt()
+                textSize = dp(context, if (selected) 15f else 12f)
+                textAlign = Paint.Align.CENTER
+                typeface = Typeface.DEFAULT_BOLD
+            }
+            // 기준선을 글자 높이의 절반만큼 내려서 원 중심에 세로 가운데 맞춤
+            canvas.drawText(it, r, r - (text.descent() + text.ascent()) / 2, text)
+        }
         bmp
     }
 

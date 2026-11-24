@@ -32,12 +32,10 @@ import com.kakao.vectormap.camera.CameraUpdateFactory
 import com.kakao.vectormap.label.LabelOptions
 import com.kakao.vectormap.label.LabelStyle
 import com.kakao.vectormap.label.LabelStyles
-import com.kakao.vectormap.label.LabelTextBuilder
 import com.kakao.vectormap.route.RouteLineOptions
 import com.kakao.vectormap.route.RouteLineSegment
 import com.kakao.vectormap.route.RouteLineStyle
 import com.kakao.vectormap.LatLng as KakaoLatLng
-import kotlin.math.roundToInt
 
 /** 지도 위 핀 하나. [label] 은 번호 핀("1"~"10", S-06)일 때만 */
 data class MapMarker(
@@ -140,20 +138,16 @@ fun KakaoMapView(
     }
 
     // 핀 다시 그리기.
-    // MapPins 가 이미 화면 밀도(density)를 곱해 그림을 만들므로 SDK 의 dp 배율(setApplyDpScale, 기본 켜짐)은 끈다.
-    // 켜 두면 밀도를 한 번 더 곱해 고해상도 폰일수록 핀이 커진다. 끄면 글자 크기도 px 로 받으므로 밀도를 직접 곱한다.
+    // MapPins 가 이미 화면 밀도(density)를 곱해 그림을 만들므로 SDK 의 dp 배율(setApplyDpScale, 기본 켜짐)은 끔.
+    // 켜 두면 밀도를 한 번 더 곱해 고해상도 폰일수록 핀이 커짐. 번호는 SDK 글자 대신 핀 그림 안에 직접 그림(원 가운데 정렬)
     LaunchedEffect(kakaoMap, markers, myLocation) {
         val layer = kakaoMap?.labelManager?.layer ?: return@LaunchedEffect
-        val density = context.resources.displayMetrics.density
         layer.removeAll()
         markers.forEach { m ->
-            val style = LabelStyle.from(MapPins.pin(context, m.selected))
-                .setApplyDpScale(false)
-                .setTextStyles(((if (m.selected) 16 else 13) * density).roundToInt(), Color.WHITE)
-            val options = LabelOptions.from(m.id, KakaoLatLng.from(m.point.latitude, m.point.longitude))
-                .setStyles(LabelStyles.from(style))
-            m.label?.let { options.setTexts(LabelTextBuilder().setTexts(it)) }
-            layer.addLabel(options)
+            val style = LabelStyle.from(MapPins.pin(context, m.selected, m.label)).setApplyDpScale(false)
+            layer.addLabel(
+                LabelOptions.from(m.id, KakaoLatLng.from(m.point.latitude, m.point.longitude)).setStyles(LabelStyles.from(style)),
+            )
         }
         myLocation?.let {
             layer.addLabel(
