@@ -3,6 +3,7 @@ package com.bloom.core.map
 import android.graphics.Color
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -14,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -32,12 +34,10 @@ import com.kakao.vectormap.camera.CameraUpdateFactory
 import com.kakao.vectormap.label.LabelOptions
 import com.kakao.vectormap.label.LabelStyle
 import com.kakao.vectormap.label.LabelStyles
-import com.kakao.vectormap.label.LabelTextBuilder
 import com.kakao.vectormap.route.RouteLineOptions
 import com.kakao.vectormap.route.RouteLineSegment
 import com.kakao.vectormap.route.RouteLineStyle
 import com.kakao.vectormap.LatLng as KakaoLatLng
-import kotlin.math.roundToInt
 
 /** 지도 위 핀 하나. [label] 은 번호 핀("1"~"10", S-06)일 때만 */
 data class MapMarker(
@@ -100,13 +100,18 @@ fun KakaoMapView(
     var kakaoMap by remember { mutableStateOf<KakaoMap?>(null) }
     val currentOnMarkerClick by rememberUpdatedState(onMarkerClick)
     val currentOnError by rememberUpdatedState(onMapError)
+    // 지도 시작 실패(키 해시 미등록, 인증 오류 등) 여부. 실패 시 빈 지도 대신 안내 표시
+    var mapFailed by remember { mutableStateOf(false) }
 
     // 지도 시작 + 화면이 가려지면 멈추고 다시 보이면 재개, 화면을 떠나면 정리
     DisposableEffect(lifecycleOwner) {
         mapView.start(
             object : MapLifeCycleCallback() {
                 override fun onMapDestroy() = Unit
-                override fun onMapError(error: Exception) = currentOnError(error) // 키 해시·키 오류도 여기로 온다
+                override fun onMapError(error: Exception) { // 키 해시·키 오류도 여기로 온다
+                    mapFailed = true
+                    currentOnError(error)
+                }
             },
             object : KakaoMapReadyCallback() {
                 override fun onMapReady(map: KakaoMap) {
@@ -140,20 +145,16 @@ fun KakaoMapView(
     }
 
     // 핀 다시 그리기.
-    // MapPins 가 이미 화면 밀도(density)를 곱해 그림을 만들므로 SDK 의 dp 배율(setApplyDpScale, 기본 켜짐)은 끈다.
-    // 켜 두면 밀도를 한 번 더 곱해 고해상도 폰일수록 핀이 커진다. 끄면 글자 크기도 px 로 받으므로 밀도를 직접 곱한다.
+    // MapPins 가 이미 화면 밀도(density)를 곱해 그림을 만들므로 SDK 의 dp 배율(setApplyDpScale, 기본 켜짐)은 끔.
+    // 켜 두면 밀도를 한 번 더 곱해 고해상도 폰일수록 핀이 커짐. 번호는 SDK 글자 대신 핀 그림 안에 직접 그림(원 가운데 정렬)
     LaunchedEffect(kakaoMap, markers, myLocation) {
         val layer = kakaoMap?.labelManager?.layer ?: return@LaunchedEffect
-        val density = context.resources.displayMetrics.density
         layer.removeAll()
         markers.forEach { m ->
-            val style = LabelStyle.from(MapPins.pin(context, m.selected))
-                .setApplyDpScale(false)
-                .setTextStyles(((if (m.selected) 16 else 13) * density).roundToInt(), Color.WHITE)
-            val options = LabelOptions.from(m.id, KakaoLatLng.from(m.point.latitude, m.point.longitude))
-                .setStyles(LabelStyles.from(style))
-            m.label?.let { options.setTexts(LabelTextBuilder().setTexts(it)) }
-            layer.addLabel(options)
+            val style = LabelStyle.from(MapPins.pin(context, m.selected, m.label)).setApplyDpScale(false)
+            layer.addLabel(
+                LabelOptions.from(m.id, KakaoLatLng.from(m.point.latitude, m.point.longitude)).setStyles(LabelStyles.from(style)),
+            )
         }
         myLocation?.let {
             layer.addLabel(
@@ -178,5 +179,14 @@ fun KakaoMapView(
         if (lines.isNotEmpty()) layer.addRouteLine(RouteLineOptions.from(lines))
     }
 
-    AndroidView(factory = { mapView }, modifier = modifier)
+    // 지도 칸만 안내로 대체. 시트, 목록 등 화면의 나머지는 그대로 사용 가능
+    Box(modifier) {
+        AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
+        if (mapFailed) {
+            // 지도 칸 아래쪽은 시트가 덮으므로 글자는 위쪽 30% 지점에 배치
+            Box(Modifier.fillMaxSize().background(BloomTheme.colors.skeleton), contentAlignment = BiasAlignment(0f, -0.4f)) {
+                Text("지도를 불러오지 못했어요", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
 }
