@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bloom.core.designsystem.UiState
 import com.bloom.core.location.LocationTracker
+import com.bloom.core.model.LatLng
 import com.bloom.core.model.Place
 import com.bloom.core.model.PlaceLimits
 import com.bloom.core.model.RecentDestination
@@ -11,8 +12,10 @@ import com.bloom.core.network.toAppError
 import com.bloom.data.repository.PlaceRepository
 import com.bloom.data.repository.RecentDestinationRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +24,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transformLatest
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 /**
@@ -40,6 +44,12 @@ class SearchViewModel @Inject constructor(
     /** [다시 시도]를 누를 때마다 1씩 증가. 같은 검색어도 다시 조회하기 위한 값 */
     private val retryCount = MutableStateFlow(0)
 
+    /**
+     * 검색 기준 위치. 화면을 열 때 한 번만 요청(사용자가 입력하는 동안 미리 받아 둠).
+     * 새 위치를 처음 잡을 때는 수 초가 걸릴 수 있어서 검색마다 따로 요청하지 않음
+     */
+    private val searchCenter: Deferred<LatLng?> = viewModelScope.async { locationTracker.currentLocation() }
+
     /** null = 검색어가 비어 있음(최근 목적지를 보여 줌) */
     @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
     val results: StateFlow<UiState<SearchResults>?> = combine(
@@ -53,7 +63,9 @@ class SearchViewModel @Inject constructor(
                 return@transformLatest
             }
             emit(UiState.Loading)
-            val result = placeRepository.search(q, locationTracker.currentLocation()).fold(
+            // 위치가 늦으면 정해 둔 시간만 기다리고 위치 없이 검색(위치 요청 자체는 계속 진행되어 다음 검색부터 사용)
+            val near = withTimeoutOrNull(PlaceLimits.SEARCH_LOCATION_WAIT_MILLIS) { searchCenter.await() }
+            val result = placeRepository.search(q, near).fold(
                 onSuccess = { list ->
                     if (list.isEmpty()) UiState.Empty else UiState.Success(SearchResults(q, list.take(PlaceLimits.MAX_AUTOCOMPLETE)))
                 },

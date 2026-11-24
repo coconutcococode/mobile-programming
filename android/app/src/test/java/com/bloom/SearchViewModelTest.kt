@@ -11,6 +11,7 @@ import com.bloom.data.repository.RecentDestinationRepository
 import com.bloom.feature.search.SearchViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
@@ -93,6 +94,32 @@ class SearchViewModelTest {
         assertEquals(listOf(RecentDestination("place-1", "학교")), recents.items.value)
     }
 
+    @Test
+    fun `위치가 끝내 오지 않아도 정해 둔 시간 뒤 위치 없이 검색해 결과를 보여 준다`() = runTest(dispatcher) {
+        val vm = SearchViewModel(FakePlaceRepository(), recents, LocationTracking(arrives = false))
+        backgroundScope.launch { vm.results.collect {} }
+
+        vm.onQueryChange("홍")
+        advanceUntilIdle()
+
+        assertTrue(vm.results.value is UiState.Success)
+    }
+
+    @Test
+    fun `위치는 화면을 열 때 한 번만 요청하고 이후 검색에서 다시 쓴다`() = runTest(dispatcher) {
+        val tracker = LocationTracking(arrives = true)
+        val vm = SearchViewModel(FakePlaceRepository(), recents, tracker)
+        backgroundScope.launch { vm.results.collect {} }
+
+        vm.onQueryChange("홍")
+        advanceUntilIdle()
+        vm.onQueryChange("홍익")
+        advanceUntilIdle()
+
+        assertEquals(1, tracker.requests)
+        assertTrue(vm.results.value is UiState.Success)
+    }
+
     private class InMemoryRecents : RecentDestinationRepository {
         val items = MutableStateFlow<List<RecentDestination>>(emptyList())
         override fun observe(): Flow<List<RecentDestination>> = items
@@ -104,6 +131,18 @@ class SearchViewModelTest {
     private object NoLocation : LocationTracker {
         override fun hasPreciseLocationPermission() = false
         override suspend fun currentLocation(): LatLng? = null
+        override fun locationUpdates(intervalMillis: Long): Flow<LocationFix> = emptyFlow()
+    }
+
+    /** 위치 요청 횟수 기록. [arrives] 가 false 면 위치가 끝내 오지 않는 상황 */
+    private class LocationTracking(private val arrives: Boolean) : LocationTracker {
+        var requests = 0
+        override fun hasPreciseLocationPermission() = true
+        override suspend fun currentLocation(): LatLng? {
+            requests++
+            if (!arrives) awaitCancellation()
+            return LatLng(37.5563, 126.9246)
+        }
         override fun locationUpdates(intervalMillis: Long): Flow<LocationFix> = emptyFlow()
     }
 }

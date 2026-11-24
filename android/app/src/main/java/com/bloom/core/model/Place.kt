@@ -40,6 +40,9 @@ data class Place(
 object PlaceLimits {
     const val MAX_AUTOCOMPLETE = 10
     const val SEARCH_DEBOUNCE_MILLIS = 300L
+
+    /** 자동완성 한 번이 검색 기준 위치를 기다리는 최대 시간. 넘으면 위치 없이 검색 */
+    const val SEARCH_LOCATION_WAIT_MILLIS = 1_000L
     const val MAX_RECENT_DESTINATIONS = 20
     const val NEARBY_RADIUS_METERS = 500
     const val MAX_NEARBY = 10

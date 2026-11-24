@@ -1,5 +1,7 @@
 package com.bloom.data.local
 
+import android.database.sqlite.SQLiteException
+import android.util.Log
 import com.bloom.core.database.RecentDestinationDao
 import com.bloom.core.model.PlaceLimits
 import com.bloom.core.model.RecentDestination
@@ -19,6 +21,11 @@ class RoomRecentDestinationRepository @Inject constructor(
         dao.observe(PlaceLimits.MAX_RECENT_DESTINATIONS).map { list -> list.map { RecentDestination(it.placeId, it.query) } }
 
     override suspend fun save(placeId: String, query: String) {
-        dao.saveOnTop(placeId, query, now = System.currentTimeMillis(), keep = PlaceLimits.MAX_RECENT_DESTINATIONS)
+        // 최근 목적지는 부가 기록이라 DB 오류(저장 공간 부족 등)로 검색, 길찾기를 막지 않음. 취소(CancellationException)는 그대로 전달
+        try {
+            dao.saveOnTop(placeId, query, now = System.currentTimeMillis(), keep = PlaceLimits.MAX_RECENT_DESTINATIONS)
+        } catch (e: SQLiteException) {
+            Log.w("RecentDestinations", "최근 목적지 저장 실패", e)
+        }
     }
 }
