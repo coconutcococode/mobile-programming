@@ -16,6 +16,7 @@ import com.bloom.core.network.toAppError
 import com.bloom.data.repository.PlaceRepository
 import com.bloom.data.repository.RouteRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -30,14 +31,21 @@ import javax.inject.Inject
  * 다른 화면도 이 구조(저장소 호출 → UiState 로 변환 → 화면은 상태만 그림)를 따른다.
  */
 @HiltViewModel
-class RouteCandidatesViewModel @Inject constructor(
-    savedStateHandle: SavedStateHandle,
+class RouteCandidatesViewModel internal constructor(
+    private val args: RouteCandidatesRoute,
     private val placeRepository: PlaceRepository,
     private val routeRepository: RouteRepository,
     private val locationTracker: LocationTracker,
 ) : ViewModel() {
 
-    private val args = savedStateHandle.toRoute<RouteCandidatesRoute>()
+    /** Hilt 가 쓰는 생성자. 화면 인자 읽기(toRoute)는 안드로이드 Bundle 이 필요해서, 단위 테스트는 인자를 바로 받는 생성자를 쓴다. */
+    @Inject constructor(
+        savedStateHandle: SavedStateHandle,
+        placeRepository: PlaceRepository,
+        routeRepository: RouteRepository,
+        locationTracker: LocationTracker,
+    ) : this(savedStateHandle.toRoute<RouteCandidatesRoute>(), placeRepository, routeRepository, locationTracker)
+
     val destinationName: String = args.destinationName
 
     private val _sort = MutableStateFlow(RouteSortType.FASTEST) // 기본 정렬: 최소 시간
@@ -62,8 +70,12 @@ class RouteCandidatesViewModel @Inject constructor(
         load()
     }
 
+    /** 진행 중인 검색. 다시 검색하면 이전 검색을 취소해, 늦게 끝난 이전 결과가 새 결과·좌표를 덮어쓰지 않게 한다. */
+    private var loadJob: Job? = null
+
     fun load() {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             candidates.value = UiState.Loading
             searchedOrigin = null
             searchedDestination = null

@@ -33,12 +33,31 @@ fun kakaoMapDirections(placeId: String, origin: LatLng?, destination: LatLng?): 
 
 private fun LatLng.param() = "$latitude,$longitude"
 
-/** 앱 → 웹 순서로 열어 본다. 둘 다 열 곳이 없으면 false. */
+/** 카카오맵 앱(Google Play 패키지 이름) */
+const val KAKAO_MAP_PACKAGE = "net.daum.android.map"
+
+/** 열어 볼 링크와 받을 앱. [packageName]이 null 이면 그 링크를 열 수 있는 아무 앱(브라우저). */
+data class KakaoMapLaunch(val uri: String, val packageName: String?)
+
+/**
+ * 앱 → 웹 순서.
+ * 앱 링크에는 현재 위치와 목적지가 들어 있으므로 카카오맵 앱으로만 보낸다.
+ * 같은 `kakaomap://` 주소를 등록한 다른 앱이 위치를 받아 가지 못하게 하기 위해서다.
+ * 웹 링크에는 장소 ID만 있어 아무 브라우저로나 연다.
+ */
+fun kakaoMapLaunches(directions: KakaoMapDirections): List<KakaoMapLaunch> = listOfNotNull(
+    directions.appUri?.let { KakaoMapLaunch(it, KAKAO_MAP_PACKAGE) },
+    KakaoMapLaunch(directions.webUrl, packageName = null),
+)
+
+/** [kakaoMapLaunches] 순서로 열어 본다. 둘 다 열 곳이 없으면 false. */
 fun openKakaoMapDirections(context: Context, directions: KakaoMapDirections): Boolean {
-    val uris = listOfNotNull(directions.appUri, directions.webUrl)
-    for (uri in uris) {
+    for (launch in kakaoMapLaunches(directions)) {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(launch.uri))
+            .setPackage(launch.packageName)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            context.startActivity(intent)
             return true
         } catch (_: ActivityNotFoundException) {
             // 카카오맵 앱이 없으면 다음 후보(웹)
