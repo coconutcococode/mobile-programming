@@ -4,9 +4,14 @@ import com.bloom.core.designsystem.UiState
 import com.bloom.core.location.LocationTracker
 import com.bloom.core.model.LatLng
 import com.bloom.core.model.LocationFix
+import com.bloom.core.model.NearbySort
+import com.bloom.core.model.Place
+import com.bloom.core.model.PlaceCategory
 import com.bloom.core.model.PlaceLimits
 import com.bloom.core.model.RecentDestination
 import com.bloom.data.fake.FakePlaceRepository
+import com.bloom.data.fake.SamplePlaces
+import com.bloom.data.repository.PlaceRepository
 import com.bloom.data.repository.RecentDestinationRepository
 import com.bloom.feature.search.SearchViewModel
 import kotlinx.coroutines.Dispatchers
@@ -95,20 +100,23 @@ class SearchViewModelTest {
     }
 
     @Test
-    fun `위치가 끝내 오지 않아도 정해 둔 시간 뒤 위치 없이 검색해 결과를 보여 준다`() = runTest(dispatcher) {
-        val vm = SearchViewModel(FakePlaceRepository(), recents, LocationTracking(arrives = false))
+    fun `위치가 아직 없으면 기다리지 않고 입력이 멈춘 지 0_3초에 위치 없이 검색한다`() = runTest(dispatcher) {
+        val places = RecordingPlaces { testScheduler.currentTime }
+        val vm = SearchViewModel(places, recents, LocationTracking(arrives = false))
         backgroundScope.launch { vm.results.collect {} }
 
         vm.onQueryChange("홍")
         advanceUntilIdle()
 
+        assertEquals(listOf(PlaceLimits.SEARCH_DEBOUNCE_MILLIS to null), places.calls)
         assertTrue(vm.results.value is UiState.Success)
     }
 
     @Test
-    fun `위치는 화면을 열 때 한 번만 요청하고 이후 검색에서 다시 쓴다`() = runTest(dispatcher) {
+    fun `위치는 화면을 열 때 한 번만 요청하고 받은 위치를 이후 검색마다 쓴다`() = runTest(dispatcher) {
+        val places = RecordingPlaces { testScheduler.currentTime }
         val tracker = LocationTracking(arrives = true)
-        val vm = SearchViewModel(FakePlaceRepository(), recents, tracker)
+        val vm = SearchViewModel(places, recents, tracker)
         backgroundScope.launch { vm.results.collect {} }
 
         vm.onQueryChange("홍")
@@ -117,7 +125,19 @@ class SearchViewModelTest {
         advanceUntilIdle()
 
         assertEquals(1, tracker.requests)
-        assertTrue(vm.results.value is UiState.Success)
+        assertEquals(listOf(HERE, HERE), places.calls.map { it.second })
+    }
+
+    /** 자동완성 요청 시각(가상 시계)과 기준 위치 기록 */
+    private class RecordingPlaces(private val now: () -> Long) : PlaceRepository {
+        val calls = mutableListOf<Pair<Long, LatLng?>>()
+        override suspend fun search(query: String, near: LatLng?): Result<List<Place>> {
+            calls += now() to near
+            return Result.success(listOf(SamplePlaces.School))
+        }
+        override suspend fun getPlace(placeId: String): Result<Place> = Result.success(SamplePlaces.School)
+        override suspend fun nearby(center: LatLng, category: PlaceCategory, sort: NearbySort): Result<List<Place>> =
+            Result.success(emptyList())
     }
 
     private class InMemoryRecents : RecentDestinationRepository {
@@ -141,8 +161,11 @@ class SearchViewModelTest {
         override suspend fun currentLocation(): LatLng? {
             requests++
             if (!arrives) awaitCancellation()
-            return LatLng(37.5563, 126.9246)
+            return HERE
         }
         override fun locationUpdates(intervalMillis: Long): Flow<LocationFix> = emptyFlow()
     }
 }
+
+/** 테스트용 현재 위치(홍대입구 근처) */
+private val HERE = LatLng(37.5563, 126.9246)

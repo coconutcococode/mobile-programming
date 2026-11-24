@@ -12,10 +12,8 @@ import com.bloom.core.network.toAppError
 import com.bloom.data.repository.PlaceRepository
 import com.bloom.data.repository.RecentDestinationRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -24,7 +22,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transformLatest
-import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -46,9 +44,13 @@ class SearchViewModel @Inject constructor(
 
     /**
      * 검색 기준 위치. 화면을 열 때 한 번만 요청(사용자가 입력하는 동안 미리 받아 둠).
-     * 새 위치를 처음 잡을 때는 수 초가 걸릴 수 있어서 검색마다 따로 요청하지 않음
+     * 새 위치를 처음 잡을 때는 수 초가 걸릴 수 있어서, 검색은 기다리지 않고 그 시점의 값 사용(없으면 위치 없이 검색)
      */
-    private val searchCenter: Deferred<LatLng?> = viewModelScope.async { locationTracker.currentLocation() }
+    private val searchCenter = MutableStateFlow<LatLng?>(null)
+
+    init {
+        viewModelScope.launch { searchCenter.value = locationTracker.currentLocation() }
+    }
 
     /** null = 검색어가 비어 있음(최근 목적지를 보여 줌) */
     @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
@@ -63,9 +65,8 @@ class SearchViewModel @Inject constructor(
                 return@transformLatest
             }
             emit(UiState.Loading)
-            // 위치가 늦으면 정해 둔 시간만 기다리고 위치 없이 검색(위치 요청 자체는 계속 진행되어 다음 검색부터 사용)
-            val near = withTimeoutOrNull(PlaceLimits.SEARCH_LOCATION_WAIT_MILLIS) { searchCenter.await() }
-            val result = placeRepository.search(q, near).fold(
+            // 위치를 기다리지 않음: 입력이 멈추고 0.3초 뒤 바로 검색(늦게 도착한 위치는 다음 검색부터 사용)
+            val result = placeRepository.search(q, searchCenter.value).fold(
                 onSuccess = { list ->
                     if (list.isEmpty()) UiState.Empty else UiState.Success(SearchResults(q, list.take(PlaceLimits.MAX_AUTOCOMPLETE)))
                 },
