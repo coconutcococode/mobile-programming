@@ -17,9 +17,12 @@ fun routeMapSegments(route: RouteCandidate): List<MapRouteSegment> =
 fun routeFitPoints(route: RouteCandidate): List<LatLng> =
     route.segments.flatMap { it.path } + route.destination.location
 
-/** 출발점 = 첫 구간의 첫 좌표. 경로선이 없으면 null. */
+/**
+ * 출발점 = 첫 구간의 첫 좌표. 첫 구간에 좌표가 없으면 null(출발점 핀을 찍지 않음).
+ * 뒤 구간의 첫 좌표(승차 정류장 등)를 쓰면 실제 출발 위치가 아닌 곳에 출발점이 찍힌다.
+ */
 fun routeOrigin(route: RouteCandidate): LatLng? =
-    route.segments.firstNotNullOfOrNull { it.path.firstOrNull() }
+    route.segments.firstOrNull()?.path?.firstOrNull()
 
 /** 목적지 핀(선택 상태 색으로 강조). */
 fun routeDestinationMarker(route: RouteCandidate): MapMarker =

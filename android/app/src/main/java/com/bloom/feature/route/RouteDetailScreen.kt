@@ -7,13 +7,14 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -122,9 +123,15 @@ fun RouteDetailScreen(
             )
             return@Scaffold
         }
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            RouteMap(candidate, Modifier.fillMaxWidth().height(RouteMapHeight))
-            RouteSummary(candidate, hasActiveGuide, onOpenActiveGuide)
+        // 화면이 낮으면(가로 모드·작은 창) 지도가 높이를 다 차지해 아래 정보가 안 보인다.
+        // 지도는 남은 높이의 40%까지만 쓰고(지도 위를 끌면 스크롤이 아니라 지도가 움직이므로), 전체를 세로로 스크롤한다.
+        // LazyColumn 은 지도가 화면 밖으로 나가면 지도를 해제했다 다시 만들어서 일반 스크롤을 쓴다(구간 수가 적어 부담 없음)
+        BoxWithConstraints(Modifier.fillMaxSize().padding(padding)) {
+            val mapHeight = minOf(RouteMapHeight, maxHeight * RouteMapMaxHeightRatio)
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                RouteMap(candidate, Modifier.fillMaxWidth().height(mapHeight))
+                RouteSummary(candidate, hasActiveGuide, onOpenActiveGuide)
+            }
         }
     }
 }
@@ -148,7 +155,7 @@ private fun RouteMap(candidate: RouteCandidate, modifier: Modifier) {
 @Composable
 private fun RouteSummary(candidate: RouteCandidate, hasActiveGuide: Boolean, onOpenActiveGuide: () -> Unit) {
     Column(
-        Modifier.fillMaxSize().padding(horizontal = BloomDimens.ScreenHorizontal).padding(top = BloomDimens.CardGap),
+        Modifier.fillMaxWidth().padding(horizontal = BloomDimens.ScreenHorizontal).padding(vertical = BloomDimens.CardGap),
         verticalArrangement = Arrangement.spacedBy(BloomDimens.CardGap),
     ) {
         if (hasActiveGuide) {
@@ -161,8 +168,8 @@ private fun RouteSummary(candidate: RouteCandidate, hasActiveGuide: Boolean, onO
             color = BloomTheme.colors.textSecondary,
         )
         SegmentBar(candidate.segments)
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(candidate.segments) { seg ->
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            candidate.segments.forEach { seg ->
                 Text("• ${seg.label} ${seg.durationMinutes}분  ${seg.startName} → ${seg.endName}", style = MaterialTheme.typography.bodyMedium)
             }
         }
@@ -171,6 +178,9 @@ private fun RouteSummary(candidate: RouteCandidate, hasActiveGuide: Boolean, onO
 
 /** 지도 높이: 360×760dp 기준 화면 위쪽 약 1/3(UI 설계서 S-03) */
 private val RouteMapHeight = 240.dp
+
+/** 화면이 낮을 때 지도가 차지할 수 있는 최대 비율 */
+private const val RouteMapMaxHeightRatio = 0.4f
 
 /**
  * 안드로이드 13부터는 알림 권한이 있어야 잠금화면 안내(S-05)가 보인다.

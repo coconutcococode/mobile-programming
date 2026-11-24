@@ -60,4 +60,13 @@ class RouteMapTest {
         assertEquals(listOf(destination.location), routeFitPoints(route))
         assertEquals(destination.location, routeCenter(route))
     }
+
+    @Test
+    fun `첫 구간에 좌표가 없으면 뒤 구간 좌표를 출발점으로 쓰지 않고 출발점 핀을 생략한다`() = runTest {
+        val route = firstRoute().let { r ->
+            r.copy(segments = r.segments.mapIndexed { i, seg -> if (i == 0) seg.copy(path = emptyList()) else seg })
+        }
+        assertTrue(route.segments[1].path.isNotEmpty()) // 뒤 구간(승차역부터)에는 좌표가 있음
+        assertEquals(null, routeOrigin(route))
+    }
 }
