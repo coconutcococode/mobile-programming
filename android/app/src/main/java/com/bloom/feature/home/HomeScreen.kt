@@ -4,6 +4,7 @@ import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -28,6 +30,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -40,11 +46,13 @@ import com.bloom.core.designsystem.component.ThreeStepSheetScaffold
 import com.bloom.core.designsystem.component.rememberThreeStepSheetState
 import com.bloom.core.designsystem.theme.BloomDimens
 import com.bloom.core.designsystem.theme.BloomTheme
+import com.bloom.core.location.LocationPermissions
 import com.bloom.core.map.KakaoMapView
 import com.bloom.core.map.MapMarker
 import com.bloom.core.model.Favorite
 import com.bloom.core.model.LatLng
 import com.bloom.core.model.Place
+import com.bloom.core.model.RecentDestination
 import com.bloom.data.fake.SamplePlaces
 import com.bloom.feature.place.PlaceDetailSheet
 import com.bloom.feature.place.SaveFavoriteDialog
@@ -57,8 +65,10 @@ import com.bloom.feature.place.SaveFavoriteDialog
  */
 @Composable
 fun HomeScreen(
+    onSearchClick: () -> Unit,
     onPlaceSelected: (Place) -> Unit,
     onFavoriteClick: (Favorite) -> Unit,
+    onRecentClick: (RecentDestination) -> Unit,
     onGuideBannerClick: () -> Unit,
     onLocationPermissionDenied: () -> Unit,
     onLoginRequired: () -> Unit,
@@ -74,25 +84,48 @@ fun HomeScreen(
     val saveMessage by viewModel.saveMessage.collectAsStateWithLifecycle()
     val savingPlace by viewModel.savingPlace.collectAsStateWithLifecycle()
     val recenterRequest by viewModel.recenterRequest.collectAsStateWithLifecycle()
+    val recents by viewModel.recents.collectAsStateWithLifecycle()
+    // 권한 창이 떠 있는 동안 고른 최근 목적지. null 이면 [내 위치 보기]에서 연 권한 창
+    // rememberSaveable: 권한 창이 떠 있는 동안 화면이 다시 만들어져도(회전 등) 고른 목적지 유지
+    var pendingRecent by rememberSaveable(stateSaver = RecentDestinationSaver) { mutableStateOf<RecentDestination?>(null) }
 
     // S-01-D1 위치 권한 요청. 정확한 위치(FINE)를 받아야 안내가 가능(NFR-08) → 대략적 위치만이면 S-08-P1
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
-        if (result[Manifest.permission.ACCESS_FINE_LOCATION] == true) viewModel.locate() else onLocationPermissionDenied()
+        val recent = pendingRecent
+        pendingRecent = null
+        when {
+            result[Manifest.permission.ACCESS_FINE_LOCATION] != true -> onLocationPermissionDenied()
+            recent != null -> onRecentClick(recent)
+            else -> viewModel.locate()
+        }
+    }
+
+    // 최근 목적지: 목록 맨 위로 올림 → 위치 권한 확인(S-01-D1) → S-02 (검색 화면과 같은 순서)
+    val openRecent: (RecentDestination) -> Unit = { recent ->
+        viewModel.reuseRecent(recent)
+        if (viewModel.hasLocationPermission()) {
+            onRecentClick(recent)
+        } else {
+            pendingRecent = recent
+            permissionLauncher.launch(LocationPermissions.REQUIRED)
+        }
     }
 
     ThreeStepSheetScaffold(
         state = rememberThreeStepSheetState(SheetStep.Half),
         sheetContent = {
-            HomeSheet(isLoggedIn = isLoggedIn, favorites = favorites, onFavoriteClick = onFavoriteClick)
+            HomeSheet(
+                isLoggedIn = isLoggedIn,
+                favorites = favorites,
+                recents = recents,
+                onFavoriteClick = onFavoriteClick,
+                onRecentClick = openRecent,
+            )
         },
         // [내 위치 보기]는 시트 바로 위에 붙어 시트 높이를 따라 움직인다
         aboveSheet = {
             ExtendedFloatingActionButton(
-                onClick = {
-                    permissionLauncher.launch(
-                        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
-                    )
-                },
+                onClick = { permissionLauncher.launch(LocationPermissions.REQUIRED) },
                 icon = { Icon(Icons.Filled.MyLocation, contentDescription = null) },
                 text = { Text(if (locating) "현재 위치를 찾는 중…" else "내 위치 보기") },
                 modifier = Modifier.padding(end = BloomDimens.ScreenHorizontal, bottom = 16.dp),
@@ -120,8 +153,7 @@ fun HomeScreen(
                 Modifier.statusBarsPadding().padding(horizontal = BloomDimens.ScreenHorizontal, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // TODO(트랙 A): 검색 상태 화면(S-01 검색) 연결. 지금은 예시 장소로 경로 후보(S-02)를 연다.
-                SearchBarStub(onClick = { onPlaceSelected(SamplePlaces.HongdaeStreet) })
+                SearchBarStub(onClick = onSearchClick)
                 if (!isOnline) NoticeBanner("인터넷 연결이 필요합니다 · 즐겨찾기는 볼 수 있어요", tone = BannerTone.Warning)
                 saveMessage?.let { NoticeBanner(it, actionLabel = "닫기", onAction = viewModel::dismissSaveMessage) }
                 guideSession?.let { session ->
@@ -154,12 +186,14 @@ fun HomeScreen(
     }
 }
 
-/** 하단 시트: 즐겨찾기 칩 · 최근 목적지. TODO(트랙 A): 최근 목적지 20개(Room) */
+/** 하단 시트: 즐겨찾기 칩 · 최근 목적지(최대 20개, 최신순) */
 @Composable
 private fun HomeSheet(
     isLoggedIn: Boolean,
     favorites: List<Favorite>,
+    recents: List<RecentDestination>,
     onFavoriteClick: (Favorite) -> Unit,
+    onRecentClick: (RecentDestination) -> Unit,
 ) {
     Column(
         Modifier.fillMaxWidth().padding(horizontal = BloomDimens.ScreenHorizontal).padding(bottom = 24.dp),
@@ -180,7 +214,19 @@ private fun HomeSheet(
             Text("로그인하면 즐겨찾기를 여기서 바로 쓸 수 있어요", style = MaterialTheme.typography.bodySmall, color = BloomTheme.colors.textSecondary)
         }
         Text("최근 목적지", style = MaterialTheme.typography.titleMedium)
-        Text("최근에 찾은 곳이 여기에 보여요", style = MaterialTheme.typography.bodySmall, color = BloomTheme.colors.textSecondary)
+        if (recents.isEmpty()) {
+            Text("최근에 찾은 곳이 여기에 보여요", style = MaterialTheme.typography.bodySmall, color = BloomTheme.colors.textSecondary)
+        }
+        recents.forEach { recent ->
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { onRecentClick(recent) },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Outlined.History, contentDescription = null, tint = BloomTheme.colors.textSecondary)
+                // 장소명은 저장 불가(카카오 정책)라 사용자가 입력한 검색어 표시
+                Text(recent.query, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 12.dp))
+            }
+        }
     }
 }
 
@@ -203,3 +249,9 @@ private fun SearchBarStub(onClick: () -> Unit) {
         }
     }
 }
+
+/** rememberSaveable 이 [RecentDestination] 을 문자열 2개로 저장했다가 되살리는 규칙. null 은 저장하지 않음 */
+private val RecentDestinationSaver = listSaver<RecentDestination?, String>(
+    save = { r -> if (r == null) emptyList() else listOf(r.placeId, r.query) },
+    restore = { if (it.size == 2) RecentDestination(it[0], it[1]) else null },
+)
