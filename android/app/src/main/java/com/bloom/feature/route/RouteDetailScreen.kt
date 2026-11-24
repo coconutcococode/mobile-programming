@@ -9,6 +9,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,6 +19,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -33,6 +36,7 @@ import com.bloom.core.designsystem.component.ErrorState
 import com.bloom.core.designsystem.component.NoticeBanner
 import com.bloom.core.designsystem.theme.BloomDimens
 import com.bloom.core.designsystem.theme.BloomTheme
+import com.bloom.core.map.KakaoMapView
 import com.bloom.core.model.RouteCandidate
 import com.bloom.core.navigation.RouteDetailRoute
 import com.bloom.data.repository.GuideSessionRepository
@@ -70,7 +74,7 @@ class RouteDetailViewModel @Inject constructor(
 
 /**
  * S-03 경로 상세. '안내 시작' 때 알림 권한이 없으면 먼저 묻는다(S-03-D1).
- * TODO(트랙 B): 지도 위 경로선(지도 부품 나온 뒤), 즐겨찾기 별.
+ * 상단 지도에 구간별 색 경로선. TODO(트랙 B): 즐겨찾기 별 — 재검색 조건(#14) 이후.
  */
 @Composable
 fun RouteDetailScreen(
@@ -108,32 +112,65 @@ fun RouteDetailScreen(
             }
         },
     ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).padding(horizontal = BloomDimens.ScreenHorizontal),
-            verticalArrangement = Arrangement.spacedBy(BloomDimens.CardGap),
-        ) {
-            if (candidate == null) {
-                ErrorState(message = "경로 정보가 만료됐어요", description = "경로를 다시 검색해 주세요", actionLabel = "돌아가기", onAction = onBack)
-                return@Column
-            }
-            if (hasActiveGuide) {
-                NoticeBanner("이미 진행 중인 안내가 있어요", actionLabel = "진행 중인 안내 보기", onAction = onOpenActiveGuide)
-            }
-            Text("${candidate.totalMinutes}분 · ${candidate.arrivalTime} 도착", style = MaterialTheme.typography.titleLarge)
-            Text(
-                "환승 ${candidate.transferCount}회 · 도보 ${candidate.walkMeters}m",
-                style = MaterialTheme.typography.bodySmall,
-                color = BloomTheme.colors.textSecondary,
+        if (candidate == null) {
+            ErrorState(
+                message = "경로 정보가 만료됐어요",
+                description = "경로를 다시 검색해 주세요",
+                actionLabel = "돌아가기",
+                onAction = onBack,
+                modifier = Modifier.padding(padding).padding(horizontal = BloomDimens.ScreenHorizontal),
             )
-            SegmentBar(candidate.segments)
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(candidate.segments) { seg ->
-                    Text("• ${seg.label} ${seg.durationMinutes}분  ${seg.startName} → ${seg.endName}", style = MaterialTheme.typography.bodyMedium)
-                }
+            return@Scaffold
+        }
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            RouteMap(candidate, Modifier.fillMaxWidth().height(RouteMapHeight))
+            RouteSummary(candidate, hasActiveGuide, onOpenActiveGuide)
+        }
+    }
+}
+
+/** 상단 지도: 구간별 색 경로선 + 출발점 + 목적지 핀, 처음 열 때 경로 전체가 보이게 맞춘다(UI 설계서 3.1 S-03). */
+@Composable
+private fun RouteMap(candidate: RouteCandidate, modifier: Modifier) {
+    val segments = remember(candidate) { routeMapSegments(candidate) }
+    val fitPoints = remember(candidate) { routeFitPoints(candidate) }
+    val markers = remember(candidate) { listOf(routeDestinationMarker(candidate)) }
+    KakaoMapView(
+        center = remember(candidate) { routeCenter(candidate) },
+        routeSegments = segments,
+        fitPoints = fitPoints,
+        markers = markers,
+        myLocation = remember(candidate) { routeOrigin(candidate) }, // 출발 = 현재 위치(S-02 '출발 현재 위치')
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun RouteSummary(candidate: RouteCandidate, hasActiveGuide: Boolean, onOpenActiveGuide: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().padding(horizontal = BloomDimens.ScreenHorizontal).padding(top = BloomDimens.CardGap),
+        verticalArrangement = Arrangement.spacedBy(BloomDimens.CardGap),
+    ) {
+        if (hasActiveGuide) {
+            NoticeBanner("이미 진행 중인 안내가 있어요", actionLabel = "진행 중인 안내 보기", onAction = onOpenActiveGuide)
+        }
+        Text("${candidate.totalMinutes}분 · ${candidate.arrivalTime} 도착", style = MaterialTheme.typography.titleLarge)
+        Text(
+            "환승 ${candidate.transferCount}회 · 도보 ${candidate.walkMeters}m",
+            style = MaterialTheme.typography.bodySmall,
+            color = BloomTheme.colors.textSecondary,
+        )
+        SegmentBar(candidate.segments)
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(candidate.segments) { seg ->
+                Text("• ${seg.label} ${seg.durationMinutes}분  ${seg.startName} → ${seg.endName}", style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
 }
+
+/** 지도 높이: 360×760dp 기준 화면 위쪽 약 1/3(UI 설계서 S-03) */
+private val RouteMapHeight = 240.dp
 
 /**
  * 안드로이드 13부터는 알림 권한이 있어야 잠금화면 안내(S-05)가 보인다.
