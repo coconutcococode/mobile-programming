@@ -35,6 +35,7 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -144,7 +145,8 @@ fun HomeScreen(
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {
-                Box(Modifier.fillMaxSize().background(BloomTheme.colors.skeleton), contentAlignment = Alignment.Center) {
+                // 지도 칸 아래쪽은 시트가 덮으므로 글자는 위쪽 30% 지점에 배치
+                Box(Modifier.fillMaxSize().background(BloomTheme.colors.skeleton), contentAlignment = BiasAlignment(0f, -0.4f)) {
                     Text("지도는 온라인에서 표시됩니다", style = MaterialTheme.typography.bodyMedium)
                 }
             }

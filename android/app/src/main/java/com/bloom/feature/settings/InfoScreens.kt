@@ -3,13 +3,23 @@ package com.bloom.feature.settings
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.bloom.core.designsystem.component.BloomPrimaryButton
 import com.bloom.core.designsystem.component.BloomSecondaryButton
+import com.bloom.core.designsystem.component.BloomTopBar
 import com.bloom.core.designsystem.component.ScreenStub
+import com.bloom.core.designsystem.theme.BloomDimens
 import com.bloom.core.designsystem.theme.BloomTheme
 
 /** S-08-P1 위치 권한 안내 — 거절 또는 '대략적인 위치'만 허용했을 때(NFR-08). */
@@ -48,15 +58,23 @@ fun LocationPermissionScreen(
  */
 @Composable
 fun DataSourceScreen(onBack: () -> Unit) {
-    ScreenStub(
-        screenId = "S-08-I1",
-        title = "데이터 출처",
-        description = "Bloom 이 사용하는 기관별 데이터와 쓰는 곳",
-        onBack = onBack,
-    ) {
-        Source("서울특별시", "실시간 버스·지하철 도착 정보", "안내 진행(승차 전)")
-        Source("소상공인시장진흥공단", "상가(상권)정보", "주변 추천(대체 데이터)")
-        Source("카카오", "지도·장소 검색·대중교통 경로", "홈·주변·경로")
+    Scaffold(
+        topBar = { BloomTopBar(title = "데이터 출처", onBack = onBack) },
+        containerColor = MaterialTheme.colorScheme.background,
+    ) { padding ->
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = BloomDimens.ScreenHorizontal),
+            verticalArrangement = Arrangement.spacedBy(BloomDimens.CardGap),
+        ) {
+            Text("Bloom 이 사용하는 기관별 데이터와 쓰는 곳", style = MaterialTheme.typography.bodyMedium, color = BloomTheme.colors.textSecondary)
+            Source("서울특별시", "실시간 버스·지하철 도착 정보", "안내 진행(승차 전)")
+            Source("소상공인시장진흥공단", "상가(상권)정보", "주변 추천(대체 데이터)")
+            Source("카카오", "지도·장소 검색·대중교통 경로", "홈·주변·경로")
+        }
     }
 }
 

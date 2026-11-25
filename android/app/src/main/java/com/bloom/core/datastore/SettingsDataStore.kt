@@ -59,13 +59,15 @@ class SettingsDataStore @Inject constructor(
     suspend fun setAlightVibration(enabled: Boolean) = write { it[Keys.ALIGHT_VIBRATION] = enabled }
 
     /** 저장 실패(IOException)로 앱이 꺼지지 않게 한다. 실패하면 기존 설정이 그대로 남아 토글도 원래 값으로 보인다. */
-    private suspend fun write(block: (MutablePreferences) -> Unit) {
+    // 반환값: 저장 성공 여부(설정 화면의 실패 안내에 사용)
+    private suspend fun write(block: (MutablePreferences) -> Unit): Boolean =
         try {
             store.edit(block)
+            true
         } catch (_: IOException) {
             // TODO: 저장 실패 안내가 필요해지면 여기서 결과를 돌려준다.
+            false
         }
-    }
 
     private companion object {
         const val READ_RETRY_DELAY_MILLIS = 1_000L
