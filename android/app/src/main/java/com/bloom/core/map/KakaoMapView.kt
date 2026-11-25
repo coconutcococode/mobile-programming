@@ -122,6 +122,9 @@ fun KakaoMapView(
             },
             object : KakaoMapReadyCallback() {
                 override fun onMapReady(map: KakaoMap) {
+                    // 느린 기기에서는 준비 전에 '렌더링 지연'(MapTimeoutException)이 오류로 먼저 오고 이후 정상 준비됨.
+                    // 준비되면 안내를 걷어 실제 지도 표시(키 오류 같은 진짜 실패는 준비 단계까지 오지 않음)
+                    mapFailed = false
                     kakaoMap = map
                     map.setOnLabelClickListener { _, _, label ->
                         if (label.labelId != MY_LOCATION_ID) currentOnMarkerClick(label.labelId)
