@@ -259,7 +259,8 @@ fun NearbyScreen(
 
     selectedPlace?.let { place ->
         PlaceDetailSheet(
-            place = place,
+            // 주변 목록에서 방금 받은 장소라 바로 정상 상태로 표시
+            state = UiState.Success(place),
             isLoggedIn = isLoggedIn,
             onDirections = { viewModel.dismissPlace(); onDirections(it) },
             onSave = { viewModel.startSaving(it); viewModel.dismissPlace() },
