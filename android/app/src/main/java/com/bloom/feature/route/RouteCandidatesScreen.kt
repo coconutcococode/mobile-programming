@@ -17,12 +17,17 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -42,6 +47,7 @@ import com.bloom.core.model.RouteSortType
 import com.bloom.core.model.Segment
 import com.bloom.core.model.TransitMode
 import com.bloom.data.fake.SamplePlaces
+import kotlinx.coroutines.launch
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
@@ -57,6 +63,9 @@ fun RouteCandidatesScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val sort by viewModel.sort.collectAsStateWithLifecycle()
     val originLabel by viewModel.originLabel.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     RouteCandidatesContent(
         originLabel = originLabel,
@@ -67,6 +76,12 @@ fun RouteCandidatesScreen(
         onSortChange = viewModel::onSortChange,
         onRetry = viewModel::load,
         onCandidateClick = onCandidateClick,
+        onOpenKakaoMap = {
+            if (!openKakaoMapDirections(context, viewModel.kakaoMapDirections())) {
+                scope.launch { snackbar.showSnackbar("카카오맵을 열 수 없어요") }
+            }
+        },
+        snackbarHostState = snackbar,
     )
 }
 
@@ -81,9 +96,12 @@ internal fun RouteCandidatesContent(
     onSortChange: (RouteSortType) -> Unit,
     onRetry: () -> Unit,
     onCandidateClick: (RouteCandidate) -> Unit,
+    onOpenKakaoMap: () -> Unit,
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     Scaffold(
         topBar = { BloomTopBar(title = "경로 후보", onBack = onBack) },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = BloomDimens.ScreenHorizontal)) {
@@ -105,7 +123,7 @@ internal fun RouteCandidatesContent(
                     description = uiState.error.toUserMessage(),
                     onAction = onRetry,
                     secondaryActionLabel = "카카오맵 길찾기",
-                    onSecondaryAction = { /* TODO(트랙 A): 카카오맵 앱 연결 */ },
+                    onSecondaryAction = onOpenKakaoMap,
                 )
                 is UiState.Success -> LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(BloomDimens.CardGap),
@@ -182,7 +200,7 @@ private fun RouteCandidatesPreview() {
             destinationName = "홍대 걷고싶은거리",
             uiState = UiState.Success(listOf(candidate, candidate.copy(id = "2", totalMinutes = 21))),
             sort = RouteSortType.FASTEST,
-            onBack = {}, onSortChange = {}, onRetry = {}, onCandidateClick = {},
+            onBack = {}, onSortChange = {}, onRetry = {}, onCandidateClick = {}, onOpenKakaoMap = {},
         )
     }
 }

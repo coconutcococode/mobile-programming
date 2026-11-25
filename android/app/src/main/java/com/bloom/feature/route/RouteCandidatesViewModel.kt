@@ -16,6 +16,7 @@ import com.bloom.core.network.toAppError
 import com.bloom.data.repository.PlaceRepository
 import com.bloom.data.repository.RouteRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -30,14 +31,21 @@ import javax.inject.Inject
  * 다른 화면도 이 구조(저장소 호출 → UiState 로 변환 → 화면은 상태만 그림)를 따른다.
  */
 @HiltViewModel
-class RouteCandidatesViewModel @Inject constructor(
-    savedStateHandle: SavedStateHandle,
+class RouteCandidatesViewModel internal constructor(
+    private val args: RouteCandidatesRoute,
     private val placeRepository: PlaceRepository,
     private val routeRepository: RouteRepository,
     private val locationTracker: LocationTracker,
 ) : ViewModel() {
 
-    private val args = savedStateHandle.toRoute<RouteCandidatesRoute>()
+    /** Hilt 가 쓰는 생성자. 화면 인자 읽기(toRoute)는 안드로이드 Bundle 이 필요해서, 단위 테스트는 인자를 바로 받는 생성자를 쓴다. */
+    @Inject constructor(
+        savedStateHandle: SavedStateHandle,
+        placeRepository: PlaceRepository,
+        routeRepository: RouteRepository,
+        locationTracker: LocationTracker,
+    ) : this(savedStateHandle.toRoute<RouteCandidatesRoute>(), placeRepository, routeRepository, locationTracker)
+
     val destinationName: String = args.destinationName
 
     private val _sort = MutableStateFlow(RouteSortType.FASTEST) // 기본 정렬: 최소 시간
@@ -49,6 +57,10 @@ class RouteCandidatesViewModel @Inject constructor(
 
     private val candidates = MutableStateFlow<UiState<List<RouteCandidate>>>(UiState.Loading)
 
+    /** 카카오맵 길찾기용: 이번 검색에서 받은 현재 위치·목적지 좌표. 메모리에만 두고 다시 검색하면 새로 채운다. */
+    private var searchedOrigin: LatLng? = null
+    private var searchedDestination: LatLng? = null
+
     val uiState: StateFlow<UiState<List<RouteCandidate>>> =
         combine(candidates, _sort) { state, sort ->
             if (state is UiState.Success) state.copy(data = state.data.sortedFor(sort)) else state
@@ -58,17 +70,25 @@ class RouteCandidatesViewModel @Inject constructor(
         load()
     }
 
+    /** 진행 중인 검색. 다시 검색하면 이전 검색을 취소해, 늦게 끝난 이전 결과가 새 결과·좌표를 덮어쓰지 않게 한다. */
+    private var loadJob: Job? = null
+
     fun load() {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             candidates.value = UiState.Loading
+            searchedOrigin = null
+            searchedDestination = null
             // TODO(트랙 A): 위치 권한 흐름(S-01-D1 → 거절 시 S-08-P1). 지금은 권한이 없으면 서울시청 기준.
             val currentLocation = locationTracker.currentLocation()
             val origin = currentLocation ?: LatLng.SeoulCityHall
             _originLabel.value = if (currentLocation != null) ORIGIN_CURRENT_LOCATION else ORIGIN_FALLBACK
+            searchedOrigin = currentLocation
             val destination = placeRepository.getPlace(args.destinationPlaceId).getOrElse {
                 candidates.value = UiState.Error(it.toAppError())
                 return@launch
             }
+            searchedDestination = destination.location
             candidates.value = routeRepository.searchRoutes(origin, destination).fold(
                 onSuccess = { list ->
                     if (list.isEmpty()) UiState.Empty else UiState.Success(list.take(RouteLimits.MAX_CANDIDATES))
@@ -77,6 +97,10 @@ class RouteCandidatesViewModel @Inject constructor(
             )
         }
     }
+
+    /** S-02-4: 경로를 못 불러왔을 때 카카오맵에서 이어서 찾을 링크. */
+    fun kakaoMapDirections(): KakaoMapDirections =
+        kakaoMapDirections(args.destinationPlaceId, searchedOrigin, searchedDestination)
 
     fun onSortChange(type: RouteSortType) {
         _sort.value = type
