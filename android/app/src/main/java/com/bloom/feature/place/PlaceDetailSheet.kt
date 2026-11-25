@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -64,7 +66,9 @@ fun PlaceDetailSheet(
     // 내용이 짧아 반만 펼칠 필요가 없음: 처음부터 전부 펼쳐서 길찾기 · 저장 버튼이 화면 밖으로 밀리지 않게
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
-            Modifier.fillMaxWidth().padding(horizontal = BloomDimens.ScreenHorizontal).padding(bottom = 24.dp),
+            // 큰 글자 설정이나 가로 화면에서 내용이 시트 높이를 넘어도 아래 버튼까지 닿도록 스크롤
+            Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                .padding(horizontal = BloomDimens.ScreenHorizontal).padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             when (state) {
@@ -153,7 +157,7 @@ private fun RecommendReasonChip(reason: String) {
 }
 
 /**
- * 카카오맵 장소 페이지 열기(place_url 은 저장 허용 값). 카카오맵 앱이 있으면 앱, 없으면 브라우저가 받음.
+ * 카카오맵 장소 페이지 열기(place_url 은 저장 허용 값). 받을 앱(브라우저 등)은 Android 가 고름.
  * 위치 같은 민감한 정보가 없는 공개 주소라 받을 앱을 지정하지 않음. 열 곳이 없으면 false
  */
 private fun openPlacePage(context: Context, url: String): Boolean = try {
