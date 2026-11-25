@@ -70,8 +70,18 @@ class FirebaseAuthRepository @Inject constructor(
         runCatching { CredentialManager.create(context).clearCredentialState(ClearCredentialStateRequest()) }
     }
 
-    override suspend fun idToken(forceRefresh: Boolean): String? =
+    /**
+     * 토큰을 못 받으면(인터넷 끊김, 계정 만료 등) null: 요청은 Authorization 없이 보내고 응답(401 등)은 서버가 판단.
+     * Firebase 예외가 OkHttp 인터셉터 밖으로 새면 앱이 꺼질 수 있어서 여기서 막음
+     */
+    override suspend fun idToken(forceRefresh: Boolean): String? = try {
         auth.currentUser?.getIdToken(forceRefresh)?.await()?.token
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Log.w("Auth", "ID 토큰 받기 실패", e)
+        null
+    }
 
     /**
      * Google 로그인 요청에 쓰는 웹 클라이언트 ID. google-services 플러그인이 google-services.json 에서

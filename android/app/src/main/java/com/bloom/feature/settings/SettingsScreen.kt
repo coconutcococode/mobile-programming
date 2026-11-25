@@ -93,7 +93,8 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _signingIn.value = true
             _message.value = null
-            authRepository.signInWithGoogle(activityContext).onFailure { _message.value = signInMessage(it) }
+            // 취소(null)일 때는 덮어쓰지 않음: 로그인 창이 열린 사이에 뜬 설정 저장 실패 안내를 지우지 않게
+            authRepository.signInWithGoogle(activityContext).onFailure { error -> signInMessage(error)?.let { _message.value = it } }
             _signingIn.value = false
         }
     }
