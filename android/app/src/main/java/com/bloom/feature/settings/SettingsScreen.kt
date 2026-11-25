@@ -42,6 +42,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.bloom.core.datastore.AppSettings
 import com.bloom.core.datastore.SettingsDataStore
+import com.bloom.core.designsystem.component.BannerTone
 import com.bloom.core.designsystem.component.BloomPrimaryButton
 import com.bloom.core.designsystem.component.BloomTextButton
 import com.bloom.core.designsystem.component.BloomTopBar
@@ -148,7 +149,8 @@ fun SettingsScreen(
                 .padding(horizontal = BloomDimens.ScreenHorizontal),
             verticalArrangement = Arrangement.spacedBy(BloomDimens.CardGap),
         ) {
-            message?.let { NoticeBanner(it, actionLabel = "닫기", onAction = viewModel::dismissMessage) }
+            // 로그인 실패, 저장 실패는 오류라 경고 색 + 아이콘
+            message?.let { NoticeBanner(it, tone = BannerTone.Warning, actionLabel = "닫기", onAction = viewModel::dismissMessage) }
 
             SectionTitle("계정")
             val account = user
