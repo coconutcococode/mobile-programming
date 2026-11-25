@@ -78,6 +78,7 @@ fun HomeScreen(
     val guideSession by viewModel.guideSession.collectAsStateWithLifecycle()
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val selectedPlace by viewModel.selectedPlace.collectAsStateWithLifecycle()
+    val selectedPlaceId by viewModel.selectedPlaceId.collectAsStateWithLifecycle()
     val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
     val isOnline by viewModel.isOnline.collectAsStateWithLifecycle()
     val myLocation by viewModel.myLocation.collectAsStateWithLifecycle()
@@ -140,7 +141,7 @@ fun HomeScreen(
                     myLocation = myLocation,
                     recenterRequest = recenterRequest,
                     // TODO(트랙 A): 기본 장소 핀은 서버 연동 전까지 예시 장소(홍대 주변). 핀을 누르면 S-09
-                    markers = SamplePlaces.all.map { MapMarker(it.id, it.location, selected = it.id == selectedPlace?.id) },
+                    markers = SamplePlaces.all.map { MapMarker(it.id, it.location, selected = it.id == selectedPlaceId) },
                     onMarkerClick = viewModel::onMapPlaceClick,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -169,14 +170,15 @@ fun HomeScreen(
         }
     }
 
-    selectedPlace?.let { place ->
+    selectedPlace?.let { state ->
         PlaceDetailSheet(
-            place = place,
+            state = state,
             isLoggedIn = isLoggedIn,
             onDirections = { viewModel.dismissPlace(); onPlaceSelected(it) },
             onSave = { viewModel.startSaving(it); viewModel.dismissPlace() },
             onLoginClick = { viewModel.dismissPlace(); onLoginRequired() },
             onDismiss = viewModel::dismissPlace,
+            onRetry = viewModel::retryPlace,
         )
     }
 

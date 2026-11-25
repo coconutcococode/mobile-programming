@@ -2,6 +2,7 @@ package com.bloom.feature.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.bloom.core.designsystem.UiState
 import com.bloom.core.location.LocationTracker
 import com.bloom.core.model.Favorite
 import com.bloom.core.model.GuideSession
@@ -9,6 +10,7 @@ import com.bloom.core.model.LatLng
 import com.bloom.core.model.Place
 import com.bloom.core.model.RecentDestination
 import com.bloom.core.network.NetworkMonitor
+import com.bloom.core.network.toAppError
 import com.bloom.data.repository.AuthRepository
 import com.bloom.data.repository.FavoriteRepository
 import com.bloom.data.repository.GuideSessionRepository
@@ -66,8 +68,13 @@ class HomeViewModel @Inject constructor(
     private val _recenterRequest = MutableStateFlow(0)
     val recenterRequest: StateFlow<Int> = _recenterRequest.asStateFlow()
 
-    private val _selectedPlace = MutableStateFlow<Place?>(null)
-    val selectedPlace: StateFlow<Place?> = _selectedPlace.asStateFlow()
+    /** 지도 핀으로 연 장소 상세(S-09). null 이면 시트 닫힘, 여는 순간 불러오는 중(S-09-2) → 정상 또는 오류(S-09-4) */
+    private val _selectedPlace = MutableStateFlow<UiState<Place>?>(null)
+    val selectedPlace: StateFlow<UiState<Place>?> = _selectedPlace.asStateFlow()
+
+    /** 시트를 연 핀의 장소 ID. 불러오는 동안에도 핀을 선택 상태로 표시하고 [다시 시도]에 사용 */
+    private val _selectedPlaceId = MutableStateFlow<String?>(null)
+    val selectedPlaceId: StateFlow<String?> = _selectedPlaceId.asStateFlow()
 
     private var placeLookupJob: Job? = null
 
@@ -95,9 +102,24 @@ class HomeViewModel @Inject constructor(
 
     /** 지도 핀 탭 → S-09 시트. 이전 조회가 남아 있으면 취소해서 늦게 온 결과가 시트를 덮지 않게 한다. */
     fun onMapPlaceClick(placeId: String) {
+        _selectedPlaceId.value = placeId
+        loadPlace(placeId)
+    }
+
+    /** S-09-4 [다시 시도] */
+    fun retryPlace() {
+        _selectedPlaceId.value?.let(::loadPlace)
+    }
+
+    // 실제 조회 방식(재검색 조건으로 다시 찾기)은 #14 에서 교체, 시트 상태 처리는 그대로 사용
+    private fun loadPlace(placeId: String) {
         placeLookupJob?.cancel()
         placeLookupJob = viewModelScope.launch {
-            _selectedPlace.value = placeRepository.getPlace(placeId).getOrNull()
+            _selectedPlace.value = UiState.Loading
+            _selectedPlace.value = placeRepository.getPlace(placeId).fold(
+                onSuccess = { UiState.Success(it) },
+                onFailure = { UiState.Error(it.toAppError()) },
+            )
         }
     }
 
@@ -105,6 +127,7 @@ class HomeViewModel @Inject constructor(
         placeLookupJob?.cancel()
         placeLookupJob = null
         _selectedPlace.value = null
+        _selectedPlaceId.value = null
     }
 
     /** 즐겨찾기 저장 결과 안내(성공·실패). null 이면 배너 없음 */
