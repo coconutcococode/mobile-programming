@@ -1,0 +1,36 @@
+# compiled output
+/dist
+/node_modules
+
+# generated
+/src/generated/prisma
+
+# logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# env
+.env
+.env.*.local
+
+# coverage
+/coverage
+
+# temporary files
+/tmp
+
+# OS
+.DS_Store
+
+# IDE
+.idea
+.vscode/*
+!.vscode/extensions.json
+
+# tests
+/test/coverage
+/src/generated/prisma
+
+/src/generated/prisma
