@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import com.bloom.core.designsystem.UiState
 import com.bloom.core.location.LocationTracker
+import com.bloom.core.model.AppError
 import com.bloom.core.model.LatLng
 import com.bloom.core.model.RouteCandidate
 import com.bloom.core.model.RouteLimits
@@ -51,9 +52,9 @@ class RouteCandidatesViewModel internal constructor(
     private val _sort = MutableStateFlow(RouteSortType.FASTEST) // 기본 정렬: 최소 시간
     val sort: StateFlow<RouteSortType> = _sort.asStateFlow()
 
-    /** 출발지 표시: 위치를 받았으면 '현재 위치', 못 받아 기본 지역으로 검색했으면 '서울시청'. */
-    private val _originLabel = MutableStateFlow(ORIGIN_CURRENT_LOCATION)
-    val originLabel: StateFlow<String> = _originLabel.asStateFlow()
+    /** 정확한 위치 권한이 없어 화면이 권한 요청(S-01-D1)을 띄워야 하는지 */
+    private val _needsPermission = MutableStateFlow(false)
+    val needsPermission: StateFlow<Boolean> = _needsPermission.asStateFlow()
 
     private val candidates = MutableStateFlow<UiState<List<RouteCandidate>>>(UiState.Loading)
 
@@ -80,10 +81,16 @@ class RouteCandidatesViewModel internal constructor(
             searchedOrigin = null
             searchedDestination = null
             // TODO(트랙 A): 위치 권한 흐름(S-01-D1 → 거절 시 S-08-P1). 지금은 권한이 없으면 서울시청 기준.
-            val currentLocation = locationTracker.currentLocation()
-            val origin = currentLocation ?: LatLng.SeoulCityHall
-            _originLabel.value = if (currentLocation != null) ORIGIN_CURRENT_LOCATION else ORIGIN_FALLBACK
-            searchedOrigin = currentLocation
+            // 출발지는 항상 현재 위치(NFR-08). 권한이 없으면 검색 대신 권한 요청, 위치를 못 받으면 오류(다시 시도)
+            if (!locationTracker.hasPreciseLocationPermission()) {
+                _needsPermission.value = true
+                return@launch
+            }
+            val origin = locationTracker.currentLocation() ?: run {
+                candidates.value = UiState.Error(AppError.LocationUnavailable)
+                return@launch
+            }
+            searchedOrigin = origin
             val destination = placeRepository.getPlace(args.destinationPlaceId).getOrElse {
                 candidates.value = UiState.Error(it.toAppError())
                 return@launch
@@ -106,8 +113,13 @@ class RouteCandidatesViewModel internal constructor(
         _sort.value = type
     }
 
-    private companion object {
-        const val ORIGIN_CURRENT_LOCATION = "현재 위치"
-        const val ORIGIN_FALLBACK = "서울시청"
+    /** 권한 창을 띄운 시점에 요청 표시 해제(화면이 다시 만들어져도 창을 두 번 띄우지 않게) */
+    fun onPermissionRequested() {
+        _needsPermission.value = false
+    }
+
+    /** 허용이면 현재 위치로 검색. 거절은 화면이 위치 권한 안내(S-08-P1)로 이동 */
+    fun onPermissionResult(granted: Boolean) {
+        if (granted) load()
     }
 }

@@ -15,6 +15,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.bloom.core.location.LocationPermissions
 import com.bloom.core.designsystem.component.BloomPrimaryButton
 import com.bloom.core.designsystem.component.BloomSecondaryButton
 import com.bloom.core.designsystem.component.BloomTopBar
@@ -27,8 +29,15 @@ import com.bloom.core.designsystem.theme.BloomTheme
 fun LocationPermissionScreen(
     onBack: () -> Unit,
     onFavoritesOnly: () -> Unit,
+    // 값이 있으면 설정에서 정확한 위치를 켜고 돌아왔을 때(화면 재개) 호출, 경로 검색 이어서 진행
+    onPermissionGranted: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    // LifecycleResumeEffect: 화면이 다시 보일 때마다(설정 앱에서 돌아옴 포함) 실행
+    LifecycleResumeEffect(onPermissionGranted) {
+        if (onPermissionGranted != null && LocationPermissions.hasPreciseLocation(context)) onPermissionGranted()
+        onPauseOrDispose {}
+    }
     ScreenStub(
         screenId = "S-08-P1",
         title = "위치 권한 필요",
@@ -38,7 +47,7 @@ fun LocationPermissionScreen(
         Text("✓ '앱 사용 중에만 허용'", style = MaterialTheme.typography.titleMedium)
         Text("✓ '정확한 위치' 켜기", style = MaterialTheme.typography.titleMedium)
         Text(
-            "권한을 켠 뒤 돌아와서 다시 검색해 주세요.",
+            if (onPermissionGranted != null) "권한을 켜고 돌아오면 바로 경로를 찾아요." else "권한을 켠 뒤 돌아와서 다시 검색해 주세요.",
             style = MaterialTheme.typography.bodySmall,
             color = BloomTheme.colors.textSecondary,
         )

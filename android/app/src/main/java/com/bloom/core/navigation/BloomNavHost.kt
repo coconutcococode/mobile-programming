@@ -5,6 +5,7 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.toRoute
 import com.bloom.core.model.Favorite
 import com.bloom.core.model.Place
 import com.bloom.feature.favorites.FavoritesScreen
@@ -57,7 +58,7 @@ fun BloomNavHost(
                 onResumeInterrupted = { target ->
                     navController.navigate(RouteCandidatesRoute(target.placeId, target.name, searchQuery = target.searchQuery))
                 },
-                onLocationPermissionDenied = { navController.navigate(LocationPermissionRoute) },
+                onLocationPermissionDenied = { navController.navigate(LocationPermissionRoute()) },
                 onLoginRequired = { onNavigateToTab(TopLevelTab.SETTINGS) },
             )
         }
@@ -70,7 +71,7 @@ fun BloomNavHost(
                         popUpTo<SearchRoute> { inclusive = true }
                     }
                 },
-                onLocationPermissionDenied = { navController.navigate(LocationPermissionRoute) },
+                onLocationPermissionDenied = { navController.navigate(LocationPermissionRoute()) },
             )
         }
         composable<NearbyRoute> {
@@ -91,10 +92,17 @@ fun BloomNavHost(
                 onDataSourceClick = { navController.navigate(DataSourceRoute) },
             )
         }
-        composable<RouteCandidatesRoute> {
+        composable<RouteCandidatesRoute> { entry ->
+            val route = entry.toRoute<RouteCandidatesRoute>()
             RouteCandidatesScreen(
                 onBack = { navController.popBackStack() },
                 onCandidateClick = { candidate -> navController.navigate(RouteDetailRoute(candidate.id)) },
+                // S-02 대신 S-08-P1 을 띄움 → S-08-P1 에서 뒤로가기 = S-02 로 들어오기 전 화면
+                onLocationPermissionDenied = {
+                    navController.navigate(LocationPermissionRoute(route.destinationPlaceId, route.destinationName, route.searchQuery)) {
+                        popUpTo<RouteCandidatesRoute> { inclusive = true }
+                    }
+                },
             )
         }
         composable<RouteDetailRoute> {
@@ -109,10 +117,20 @@ fun BloomNavHost(
                 onBack = { navController.popBackStack() },
             )
         }
-        composable<LocationPermissionRoute> {
+        composable<LocationPermissionRoute> { entry ->
+            val route = entry.toRoute<LocationPermissionRoute>()
+            val placeId = route.destinationPlaceId
             LocationPermissionScreen(
                 onBack = { navController.popBackStack() },
                 onFavoritesOnly = { onNavigateToTab(TopLevelTab.FAVORITES) },
+                // 경로 후보에서 온 경우만: 권한을 켜고 돌아오면 S-08-P1 을 같은 목적지의 S-02 로 바꿈
+                onPermissionGranted = placeId?.let {
+                    {
+                        navController.navigate(RouteCandidatesRoute(it, route.destinationName.orEmpty(), route.searchQuery)) {
+                            popUpTo<LocationPermissionRoute> { inclusive = true }
+                        }
+                    }
+                },
             )
         }
         composable<DataSourceRoute> {
