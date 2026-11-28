@@ -54,6 +54,9 @@ fun BloomNavHost(
                     navController.navigate(RouteCandidatesRoute(recent.placeId, recent.query, searchQuery = recent.query))
                 },
                 onGuideBannerClick = toGuide,
+                onResumeInterrupted = { target ->
+                    navController.navigate(RouteCandidatesRoute(target.placeId, target.name, searchQuery = target.searchQuery))
+                },
                 onLocationPermissionDenied = { navController.navigate(LocationPermissionRoute) },
                 onLoginRequired = { onNavigateToTab(TopLevelTab.SETTINGS) },
             )
