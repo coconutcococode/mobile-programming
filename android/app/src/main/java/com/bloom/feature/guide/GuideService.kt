@@ -26,6 +26,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
@@ -40,8 +41,7 @@ import javax.inject.Inject
  * 화면이 꺼져도 안내를 이어 가는 전경 서비스(location 타입).
  * 받은 위치와 시간을 GuideSessionRepository(단계 전환 엔진)에 넘기고, 바뀐 상태를 잠금화면 알림(S-05)에 그린다.
  * 앱 화면(S-04)도 같은 저장소를 보므로 화면·알림·서비스가 항상 같은 단계를 보여 준다.
- *
- * TODO(트랙 B): 승차 지점 500m 이내 실시간 도착 30초 조회(FR-03, 서버 대조 결과 연결 후).
+ * 승차 지점 500m 안의 승차 전 단계에서는 실시간 도착 정보를 30초마다 조회한다([ArrivalUpdates], FR-03).
  */
 @AndroidEntryPoint
 class GuideService : LifecycleService() {
@@ -49,9 +49,13 @@ class GuideService : LifecycleService() {
     @Inject lateinit var guideSessionRepository: GuideSessionRepository
     @Inject lateinit var locationTracker: LocationTracker
     @Inject lateinit var settingsDataStore: SettingsDataStore
+    @Inject lateinit var arrivalUpdates: ArrivalUpdates
 
     private var running = false
     private var arrivedJob: Job? = null
+
+    /** 마지막으로 받은 위치. 승차 지점까지 거리를 재서 실시간 도착 조회를 시작할지 정한다 */
+    private val lastFix = MutableStateFlow<LocationFix?>(null)
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
@@ -80,6 +84,7 @@ class GuideService : LifecycleService() {
             observeSession()
             followLocation()
             tick()
+            lifecycleScope.launch { arrivalUpdates.run(lastFix) }
         }
         // 강제 종료되면 재시작하지 않는다. 경로는 디스크에 없으므로 다음 실행 때 S-01-B2 배너로 안내(NFR-07).
         return START_NOT_STICKY
@@ -120,7 +125,10 @@ class GuideService : LifecycleService() {
         guideSessionRepository.session
             .map { it?.locationIntervalMillis }
             .locationFixes(locationTracker)
-            .collect { guideSessionRepository.onLocation(it) }
+            .collect {
+                lastFix.value = it
+                guideSessionRepository.onLocation(it)
+            }
     }
 
     /** 지하철 추정 전환·남은 정거장처럼 시간만 지나도 바뀌는 상태를 1초마다 갱신한다. */

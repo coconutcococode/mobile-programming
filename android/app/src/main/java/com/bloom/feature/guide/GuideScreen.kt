@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
@@ -34,7 +35,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -49,17 +53,21 @@ import com.bloom.core.designsystem.component.BloomTopBar
 import com.bloom.core.designsystem.component.BannerTone
 import com.bloom.core.designsystem.component.EmptyState
 import com.bloom.core.designsystem.component.NoticeBanner
+import com.bloom.core.designsystem.component.SkeletonBlock
 import com.bloom.core.designsystem.theme.BloomDimens
 import com.bloom.core.designsystem.theme.BloomTheme
 import com.bloom.core.datastore.SettingsDataStore
 import com.bloom.core.location.LocationTracker
 import com.bloom.core.model.GuideSession
+import com.bloom.core.network.NetworkMonitor
 import com.bloom.data.repository.GuideSessionRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -68,8 +76,14 @@ class GuideViewModel @Inject constructor(
     private val guideSessionRepository: GuideSessionRepository,
     private val locationTracker: LocationTracker,
     private val settingsDataStore: SettingsDataStore,
+    private val arrivalUpdates: ArrivalUpdates,
+    networkMonitor: NetworkMonitor,
 ) : ViewModel() {
     val session: StateFlow<GuideSession?> = guideSessionRepository.session
+
+    /** S-04-5 연결 끊김 배너. 처음에는 연결된 것으로 보고 실제 값이 오면 바꾼다 */
+    val isOnline: StateFlow<Boolean> = networkMonitor.isOnline
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
     private val _rerouting = MutableStateFlow(false)
     val rerouting: StateFlow<Boolean> = _rerouting.asStateFlow()
@@ -85,6 +99,9 @@ class GuideViewModel @Inject constructor(
     fun correctStation(passedStops: Int) = guideSessionRepository.correctStation(passedStops)
     fun end() = guideSessionRepository.end()
     fun messageShown() { _message.value = null }
+
+    /** S-04-4 [다시 시도] */
+    fun retryArrival() = arrivalUpdates.retryNow()
 
     /** S-04-B3 재탐색: 지금 위치에서 같은 목적지로 가장 빠른 경로를 다시 찾아 안내를 바꾼다(FR-06). */
     fun reroute() {
@@ -112,7 +129,7 @@ class GuideViewModel @Inject constructor(
  * S-04 안내 진행(앱 내). 하단 탭 숨김. 뒤로가기 → 홈(안내는 계속, 홈에 '안내 중' 배너).
  * 상단 배너: 경로 이탈(B3) · 위치 부정확(B2) · 알림 꺼짐(B1). 지하철 구간은 '현재 역 고치기'(UC-01 A9).
  * 첫 안내 때 잠금화면에 알림이 숨겨지는 설정이면 알림 표시 설정 안내(S-04-S1)를 한 번 보여 준다.
- * TODO(트랙 B): 실시간 도착 카드(기준 시각)와 상태 S-04-1~5 — 서버 도착 정보 연결 후.
+ * 승차 지점 500m 안의 승차 전 단계에서는 실시간 도착 카드(S-04-1~5)를 보여 준다.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -123,6 +140,7 @@ fun GuideScreen(
     val session by viewModel.session.collectAsStateWithLifecycle()
     val rerouting by viewModel.rerouting.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
+    val isOnline by viewModel.isOnline.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showEndDialog by remember { mutableStateOf(false) }
     var showStationDialog by remember { mutableStateOf(false) }
@@ -174,7 +192,7 @@ fun GuideScreen(
             Modifier.fillMaxSize().padding(padding).padding(horizontal = BloomDimens.ScreenHorizontal),
             verticalArrangement = Arrangement.spacedBy(BloomDimens.CardGap),
         ) {
-            guideBanners(current, notificationsEnabled).forEach { banner ->
+            guideBanners(current, notificationsEnabled, isOnline).forEach { banner ->
                 NoticeBanner(
                     message = banner.message,
                     tone = BannerTone.Warning, // 색만이 아니라 ⚠ 아이콘·문구로도 알린다
@@ -184,6 +202,7 @@ fun GuideScreen(
                             GuideBanner.OFF_ROUTE -> viewModel.reroute()
                             GuideBanner.LOCATION_INACCURATE -> viewModel.next()
                             GuideBanner.NOTIFICATIONS_OFF -> GuideSystemSettings.openAppNotificationSettings(context)
+                            GuideBanner.OFFLINE -> Unit
                         }
                     },
                 )
@@ -210,7 +229,9 @@ fun GuideScreen(
                     Text(GuideNotification.statusText(current), style = MaterialTheme.typography.bodyMedium)
                 }
             }
-            Text("TODO: 실시간 도착 정보 카드 (트랙 B)", style = MaterialTheme.typography.bodySmall, color = BloomTheme.colors.textSecondary)
+            current.arrival?.let { arrival ->
+                ArrivalCard(arrivalCardText(arrival, upcomingBoarding(current)?.mode), onRetry = viewModel::retryArrival)
+            }
 
             if (canCorrectStation(current)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -335,6 +356,38 @@ fun GuideScreen(
             },
             dismissButton = { TextButton(onClick = { showEndDialog = false }) { Text("계속 안내") } },
         )
+    }
+}
+
+/** S-04 실시간 도착 카드(UI 설계서 4.2 S-04-1~5). */
+@Composable
+private fun ArrivalCard(text: ArrivalCardText, onRetry: () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(BloomDimens.CardRadius),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        // 연결이 끊긴 마지막 값은 흐리게: 기준 시각과 함께 보여 주되 지금 값이 아님을 알린다(글자로도 '연결 끊김')
+        Column(Modifier.padding(16.dp).alpha(if (text.dimmed) 0.55f else 1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text.title, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                text.baseTime?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = BloomTheme.colors.textSecondary) }
+            }
+            if (text.loading) {
+                // S-04-2: 카드 자리만 스켈레톤, 단계 안내와 버튼은 그대로
+                Column(
+                    Modifier.clearAndSetSemantics { contentDescription = "실시간 도착 정보를 확인하는 중" },
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    SkeletonBlock(Modifier.width(96.dp).height(28.dp))
+                    SkeletonBlock(Modifier.width(140.dp).height(16.dp))
+                }
+            }
+            text.main?.let { Text(it, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+            text.body.forEach { Text(it, style = MaterialTheme.typography.bodyMedium, color = BloomTheme.colors.textSecondary) }
+            if (text.showRetry) BloomTextButton("다시 시도", onClick = onRetry)
+            if (text.showSource) Text("출처: 서울특별시", style = MaterialTheme.typography.labelSmall, color = BloomTheme.colors.textSecondary)
+        }
     }
 }
 
