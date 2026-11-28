@@ -39,7 +39,12 @@ import kotlinx.serialization.Serializable
 @Serializable data class RouteDetailRoute(val candidateId: String)
 
 @Serializable data object GuideRoute              // S-04 안내 진행(앱 내) — 하단 탭 숨김
-@Serializable data object LocationPermissionRoute // S-08-P1 위치 권한 안내
+/** S-08-P1 위치 권한 안내. 경로 후보에서 왔으면 목적지를 받아 권한을 켜고 돌아왔을 때 바로 같은 목적지로 검색 */
+@Serializable data class LocationPermissionRoute(
+    val destinationPlaceId: String? = null,
+    val destinationName: String? = null,
+    val searchQuery: String? = null,
+)
 @Serializable data object DataSourceRoute         // S-08-I1 데이터 출처
 
 enum class TopLevelTab(

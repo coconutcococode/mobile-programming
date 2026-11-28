@@ -1,5 +1,8 @@
 package com.bloom.feature.route
 
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,6 +24,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,6 +46,8 @@ import com.bloom.core.designsystem.component.SkeletonList
 import com.bloom.core.designsystem.theme.BloomDimens
 import com.bloom.core.designsystem.theme.BloomTheme
 import com.bloom.core.designsystem.toUserMessage
+import com.bloom.core.location.LocationPermissions
+import com.bloom.core.model.AppError
 import com.bloom.core.model.RouteCandidate
 import com.bloom.core.model.RouteSortType
 import com.bloom.core.model.Segment
@@ -58,17 +64,31 @@ private val TimeFormat = DateTimeFormatter.ofPattern("HH:mm")
 fun RouteCandidatesScreen(
     onBack: () -> Unit,
     onCandidateClick: (RouteCandidate) -> Unit,
+    onLocationPermissionDenied: () -> Unit,
     viewModel: RouteCandidatesViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val sort by viewModel.sort.collectAsStateWithLifecycle()
-    val originLabel by viewModel.originLabel.collectAsStateWithLifecycle()
+    val needsPermission by viewModel.needsPermission.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    // S-01-D1 위치 권한 요청. 정확한 위치(FINE)를 허용해야 검색, 거절이나 대략적 위치만이면 S-08-P1(NFR-08)
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        val granted = result[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        viewModel.onPermissionResult(granted)
+        if (!granted) onLocationPermissionDenied()
+    }
+    LaunchedEffect(needsPermission) {
+        if (needsPermission) {
+            viewModel.onPermissionRequested()
+            permissionLauncher.launch(LocationPermissions.REQUIRED)
+        }
+    }
+
     RouteCandidatesContent(
-        originLabel = originLabel,
+        originLabel = "현재 위치",
         destinationName = viewModel.destinationName,
         uiState = uiState,
         sort = sort,
@@ -118,7 +138,12 @@ internal fun RouteCandidatesContent(
                     title = "검색 결과가 없습니다",
                     description = "도착지 이름을 바꿔 다시 검색해 보세요",
                 )
-                is UiState.Error -> ErrorState(
+                // 위치를 못 받으면 경로 대신 위치 확인 안내(다른 출발지로 검색하지 않음)
+                is UiState.Error -> if (uiState.error == AppError.LocationUnavailable) ErrorState(
+                    message = uiState.error.toUserMessage(),
+                    description = "위치 서비스가 켜져 있는지 확인한 뒤 다시 시도해 주세요",
+                    onAction = onRetry,
+                ) else ErrorState(
                     message = "경로를 불러올 수 없습니다",
                     description = uiState.error.toUserMessage(),
                     onAction = onRetry,
