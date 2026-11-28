@@ -19,6 +19,7 @@ fun AppError.toUserMessage(): String = when (this) {
     AppError.Timeout -> "응답이 늦어지고 있어요"
     AppError.Unauthorized -> "로그인이 필요해요"
     AppError.NotFound -> "정보를 찾을 수 없어요"
+    AppError.LocationUnavailable -> "현재 위치를 확인할 수 없어요"
     is AppError.Server -> "서버에 문제가 생겼어요"
     is AppError.Unknown -> "알 수 없는 오류가 발생했어요"
 }
