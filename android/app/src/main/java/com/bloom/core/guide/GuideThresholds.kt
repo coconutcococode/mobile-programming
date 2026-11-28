@@ -45,6 +45,18 @@ object GuideThresholds {
     /** 승차 지점 이 거리 이내의 승차 전 단계에서만 실시간 도착 정보를 조회 (잠정 500m) */
     const val ARRIVAL_INFO_START_METERS = 500.0
 
+    /** 실시간 도착 정보 조회 간격 (NFR-03, 30초 ±2초) */
+    const val ARRIVAL_POLL_INTERVAL_MILLIS = 30_000L
+
+    /** 도착 정보 응답이 이보다 늦으면 실패로 센다 (NFR-06) */
+    const val ARRIVAL_TIMEOUT_MILLIS = 3_000L
+
+    /** 이만큼 연달아 실패하면 오류 카드(S-04-4)로 바꾼다 (NFR-06) */
+    const val ARRIVAL_MAX_FAILURES = 3
+
+    /** 연결이 끊긴 뒤 마지막 도착 정보를 보여 주는 시간. 지나면 숨긴다 (분석서 표 4-3) */
+    const val ARRIVAL_STALE_MILLIS = 2 * 60_000L
+
     /** 기본 위치 갱신 간격 (UC-01 4단계) */
     const val LOCATION_INTERVAL_MILLIS = 5_000L
 

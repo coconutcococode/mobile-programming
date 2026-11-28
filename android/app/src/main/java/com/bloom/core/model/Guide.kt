@@ -24,6 +24,24 @@ data class ArrivalInfo(
     val status: ArrivalStatus,
 )
 
+/** 안내 화면의 실시간 도착 카드(S-04)와 잠금화면 알림 한 줄(S-05)이 보여 줄 상태. UI 설계서 4.2 S-04-1~5 */
+sealed interface ArrivalState {
+    /** S-04-2 승차 지점 500m에 들어와 첫 조회 중 */
+    data object Loading : ArrivalState
+
+    /** S-04-1 실시간 값 수신 */
+    data class Live(val info: ArrivalInfo) : ArrivalState
+
+    /** S-04-3 서울 밖 정류장([ArrivalStatus.UNSUPPORTED_AREA]) 또는 정류소 대조 실패([ArrivalStatus.MATCH_FAILED]). 안내는 그대로 계속 */
+    data class Unavailable(val status: ArrivalStatus) : ArrivalState
+
+    /** S-04-4 조회가 연달아 실패. 30초마다 계속 다시 시도한다 */
+    data class Failed(val failures: Int) : ArrivalState
+
+    /** S-04-5 연결 끊김. 마지막 값을 흐리게 보여 주고, 받은 지 2분이 지나면 [last] 를 비운다 */
+    data class Offline(val last: ArrivalInfo?) : ArrivalState
+}
+
 /**
  * 진행 중인 안내 1건. 동시에 하나만 존재한다(FR-02).
  * 앱 화면(S-04)과 잠금화면 알림(S-05)이 이 상태 하나를 같이 본다.
@@ -32,7 +50,8 @@ data class GuideSession(
     val route: RouteCandidate,
     val steps: List<GuideStep>,
     val currentStepIndex: Int = 0,
-    val arrival: ArrivalInfo? = null,
+    /** 실시간 도착 카드. 조회 대상이 아닌 단계(차량 이동 이후, 승차 지점 500m 밖)면 null */
+    val arrival: ArrivalState? = null,
     /** 도보 중 경로선 50m 이상 20초 → '재탐색' 버튼 (FR-06) */
     val isOffRoute: Boolean = false,
     /** 부정확한 위치만 30초 이상 → '위치가 부정확합니다' + '다음 단계' 버튼 (UC-01 A5) */
@@ -45,6 +64,8 @@ data class GuideSession(
     val isAtAlightingStation: Boolean = false,
     /** 위치 서비스가 다음에 쓸 위치 갱신 간격 */
     val locationIntervalMillis: Long = 5_000L,
+    /** 안내를 시작(재탐색 포함)할 때마다 바뀌는 번호. 같은 경로여도 새로 시작한 안내인지 구분한다 */
+    val guideId: Long = 0,
 ) {
     val currentStep: GuideStep get() = steps[currentStepIndex]
     val isLastStep: Boolean get() = currentStepIndex == steps.lastIndex

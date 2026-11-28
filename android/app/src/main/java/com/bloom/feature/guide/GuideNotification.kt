@@ -55,7 +55,7 @@ object GuideNotification {
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_guide)
             .setContentTitle(session?.currentStep?.title ?: "길안내 준비 중")
-            .setContentText(session?.let(::statusText).orEmpty())
+            .setContentText(session?.let(::contentText).orEmpty())
             .setSubText(session?.let { "${it.currentStepIndex + 1} / ${it.steps.size}단계 · ${it.route.arrivalTime} 도착 예정" })
             .setContentIntent(openGuide)
             .setOngoing(true)
@@ -64,6 +64,8 @@ object GuideNotification {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
 
         if (session != null) {
+            // 펼친 알림에서는 단계 안내와 도착 정보를 두 줄로
+            if (session.arrival != null) builder.setStyle(NotificationCompat.BigTextStyle().bigText(contentText(session, separator = "\n")))
             stepActions(session).take(MAX_STEP_ACTIONS).forEach { (label, action) ->
                 builder.addAction(0, label, serviceIntent(context, action))
             }
@@ -71,6 +73,12 @@ object GuideNotification {
         }
         return builder.build()
     }
+
+    /** 알림 본문: 단계 안내 + 실시간 도착 정보(FR-03, 승차 전 단계에서만). */
+    internal fun contentText(session: GuideSession, separator: String = " · "): String =
+        listOfNotNull(statusText(session), session.arrival?.let(::arrivalNotificationLine))
+            .filter { it.isNotEmpty() }
+            .joinToString(separator)
 
     /** 지금 상황에서 가장 먼저 알려야 할 한 줄 (S-05). */
     internal fun statusText(session: GuideSession): String {

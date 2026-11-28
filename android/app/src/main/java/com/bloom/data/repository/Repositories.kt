@@ -2,6 +2,7 @@ package com.bloom.data.repository
 
 import android.content.Context
 import com.bloom.core.model.ArrivalInfo
+import com.bloom.core.model.ArrivalState
 import com.bloom.core.model.Favorite
 import com.bloom.core.model.GuideSession
 import com.bloom.core.model.LatLng
@@ -97,7 +98,8 @@ interface GuideSessionRepository {
     /** 지하철 현재 역 보정 — 승차역에서 지나온 역 수 (UC-01 A9) */
     fun correctStation(passedStops: Int)
 
-    fun updateArrival(arrival: ArrivalInfo?)
+    /** 실시간 도착 카드 상태를 바꾼다. 조회 대상이 아니면 null */
+    fun updateArrival(arrival: ArrivalState?)
 
     /** '재탐색' — [from]에서 같은 목적지로 다시 검색해 가장 빠른 경로로 안내를 바꾼다(FR-06). 실패하면 false */
     suspend fun reroute(from: LatLng): Boolean

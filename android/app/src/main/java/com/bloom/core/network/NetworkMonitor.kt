@@ -37,8 +37,10 @@ class NetworkMonitor @Inject constructor(
             override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
                 trySend(capabilities.isOnline())
             }
+            // 기본 네트워크 콜백이라 onLost = 지금 쓰던 네트워크가 끊김. 이 시점에는 activeNetwork 가 아직 끊긴 네트워크를
+            // 가리켜 current() 가 true 를 돌려줄 수 있으므로 바로 false. 다른 네트워크로 넘어가면 onCapabilitiesChanged 가 다시 알려 준다
             override fun onLost(network: Network) {
-                trySend(current())
+                trySend(false)
             }
         }
         trySend(current())

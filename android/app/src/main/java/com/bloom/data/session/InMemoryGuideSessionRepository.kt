@@ -3,7 +3,7 @@ package com.bloom.data.session
 import com.bloom.core.guide.GuideClock
 import com.bloom.core.guide.GuideEngine
 import com.bloom.core.guide.GuideProgress
-import com.bloom.core.model.ArrivalInfo
+import com.bloom.core.model.ArrivalState
 import com.bloom.core.model.GuideSession
 import com.bloom.core.model.LatLng
 import com.bloom.core.model.LocationFix
@@ -62,7 +62,7 @@ class InMemoryGuideSessionRepository @Inject constructor(
 
     override fun correctStation(passedStops: Int) = update { e, p -> e.onStationCorrected(p, passedStops, clock.now()) }
 
-    override fun updateArrival(arrival: ArrivalInfo?) = synchronized(lock) {
+    override fun updateArrival(arrival: ArrivalState?) = synchronized(lock) {
         _session.value = _session.value?.copy(arrival = arrival)
     }
 
@@ -104,7 +104,7 @@ class InMemoryGuideSessionRepository @Inject constructor(
         publish(current.route, e, block(e, p), current.arrival)
     }
 
-    private fun publish(route: RouteCandidate, e: GuideEngine, p: GuideProgress, arrival: ArrivalInfo?) {
+    private fun publish(route: RouteCandidate, e: GuideEngine, p: GuideProgress, arrival: ArrivalState?) {
         progress = p
         val now = clock.now()
         _session.value = GuideSession(
@@ -118,6 +118,7 @@ class InMemoryGuideSessionRepository @Inject constructor(
             remainingStops = e.remainingStops(p, now),
             isAtAlightingStation = e.isAtAlightingStation(p, now),
             locationIntervalMillis = e.locationIntervalMillis(p),
+            guideId = generation,
         )
     }
 }
