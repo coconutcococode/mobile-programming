@@ -59,25 +59,34 @@ class ArrivalUpdates @Inject constructor(
 }
 
 /**
- * 지금 도착 정보를 조회할 승차 구간. 없으면 null.
+ * 도착 정보 조회 대상: 승차 구간 + 그 구간이 속한 안내([GuideSession.guideId]).
+ * 재탐색으로 안내가 새로 시작되면 승차 구간이 같아도 다른 대상으로 보고 조회를 처음부터 다시 한다
+ * (새 안내는 도착 카드가 비어 있는 채로 시작하므로).
+ */
+internal data class ArrivalTarget(val segment: Segment, val guideId: Long)
+
+/**
+ * 지금 도착 정보를 조회할 대상. 없으면 null.
  * - 승차 대기 단계: 그 구간
  * - 도보 이동 단계: 바로 다음이 승차 대기이고 승차 지점까지 500m 이내일 때 그 구간
  * - 차량 이동부터는 조회하지 않는다(NFR-03)
- * [active] 는 지금 조회 중인 구간. 한 번 시작하면 위치가 500m 언저리에서 흔들려도 그 승차 전까지 계속한다
+ * [active] 는 지금 조회 중인 대상. 한 번 시작하면 위치가 500m 언저리에서 흔들려도 그 승차 전까지 계속한다
  * (흔들릴 때마다 카드가 사라졌다 나타나고 조회를 새로 하지 않게).
  */
-internal fun arrivalTarget(session: GuideSession, here: LatLng?, active: Segment?): Segment? {
+internal fun arrivalTarget(session: GuideSession, here: LatLng?, active: ArrivalTarget?): ArrivalTarget? {
     val step = session.currentStep
-    return when (step.type) {
+    val segment = when (step.type) {
         GuideStepType.WAIT_BOARDING -> step.segment
         GuideStepType.WALK -> {
             val next = upcomingBoarding(session) ?: return null
-            if (next == active) return next
+            val target = ArrivalTarget(next, session.guideId)
+            if (target == active) return target
             val boardingPoint = next.path.firstOrNull() ?: return null // 좌표가 없으면 승차 대기 단계에서만 조회
             next.takeIf { here != null && Geo.distanceMeters(here, boardingPoint) <= GuideThresholds.ARRIVAL_INFO_START_METERS }
         }
         else -> null
     }
+    return segment?.let { ArrivalTarget(it, session.guideId) }
 }
 
 /** 도보 이동 단계라면 바로 다음 승차 대기 구간, 승차 대기 단계라면 그 구간. 카드의 '다음 열차·다음 버스' 글자에도 쓴다. */
@@ -90,16 +99,16 @@ internal fun upcomingBoarding(session: GuideSession): Segment? {
     }
 }
 
-internal fun arrivalTargets(sessions: Flow<GuideSession?>, fixes: Flow<LocationFix?>): Flow<Segment?> =
+internal fun arrivalTargets(sessions: Flow<GuideSession?>, fixes: Flow<LocationFix?>): Flow<ArrivalTarget?> =
     combine(sessions, fixes, ::Pair)
-        .runningFold(null as Segment?) { active, (session, fix) ->
+        .runningFold(null as ArrivalTarget?) { active, (session, fix) ->
             session?.let { arrivalTarget(it, fix?.position, active) }
         }
         .distinctUntilChanged()
 
 /**
  * 조회 순서와 카드 상태 전환(UI 설계서 4.2 S-04-1~5). 안드로이드와 무관해 가상 시간으로 단위 테스트한다.
- * - 대상이 생기면 '확인 중' → 30초마다 조회. 대상이 바뀌면 처음부터, 없어지면 카드를 지우고 멈춘다
+ * - 대상이 생기면 '확인 중' → 30초마다 조회. 대상이 바뀌면(재탐색 포함) 처음부터, 없어지면 카드를 지우고 멈춘다
  * - 3초 넘게 걸리거나 실패하면 1회 실패. 3회 연달아 실패하면 오류 카드, 그 뒤에도 30초마다 다시 시도
  * - 미제공 지역·대조 실패는 다시 물어도 같으므로 조회를 멈춘다
  * - 연결이 끊기면 마지막 값을 흐리게 두고 받은 지 2분 뒤 숨김. 연결되면 바로 다시 조회
@@ -109,24 +118,24 @@ internal class ArrivalPolling(
     private val publish: (ArrivalState?) -> Unit,
     private val now: () -> Long,
 ) {
-    private var target: Segment? = null
+    private var target: ArrivalTarget? = null
     private var state: ArrivalState? = null
     private var last: ArrivalInfo? = null
     private var lastReceivedAt = 0L
     private var failures = 0
 
-    suspend fun run(targets: Flow<Segment?>, online: Flow<Boolean>, retries: Flow<Unit>) {
-        combine(targets.distinctUntilChanged(), online.distinctUntilChanged(), ::Pair).collectLatest { (segment, isOnline) ->
-            if (segment != target) {
-                target = segment
+    suspend fun run(targets: Flow<ArrivalTarget?>, online: Flow<Boolean>, retries: Flow<Unit>) {
+        combine(targets.distinctUntilChanged(), online.distinctUntilChanged(), ::Pair).collectLatest { (newTarget, isOnline) ->
+            if (newTarget != target) {
+                target = newTarget
                 state = null
                 last = null
                 failures = 0
             }
             when {
-                segment == null -> set(null)
+                newTarget == null -> set(null)
                 !isOnline -> showOffline()
-                else -> poll(segment, retries)
+                else -> poll(newTarget.segment, retries)
             }
         }
     }

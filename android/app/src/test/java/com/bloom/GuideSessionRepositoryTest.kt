@@ -1,6 +1,7 @@
 package com.bloom
 
 import com.bloom.core.guide.GuideThresholds
+import com.bloom.core.model.ArrivalState
 import com.bloom.core.model.GuideStepType
 import com.bloom.core.model.LatLng
 import com.bloom.core.model.LocationFix
@@ -74,14 +75,22 @@ class GuideSessionRepositoryTest {
     @Test
     fun `재탐색은 같은 목적지의 가장 빠른 경로로 안내를 처음부터 다시 시작한다`() = runTest {
         startSubwayRoute()
+        val firstGuideId = repo.session.value!!.guideId
         repo.next(); repo.next()
+        repo.onTick()
+        repo.updateArrival(ArrivalState.Loading)
         assertTrue(repo.session.value!!.currentStepIndex > 0)
+        // 단계·시간·도착 정보 갱신은 같은 안내
+        assertEquals(firstGuideId, repo.session.value!!.guideId)
 
         assertTrue(repo.reroute(cityHall))
         val s = repo.session.value!!
         assertEquals(0, s.currentStepIndex)
         assertEquals(destination, s.route.destination)
         assertEquals(18, s.route.totalMinutes) // 가짜 후보 중 가장 빠른 경로
+        // 새로 시작한 안내: 승차 구간이 같아도 도착 정보를 처음부터 다시 조회하도록 번호가 바뀐다
+        assertTrue(s.guideId != firstGuideId)
+        assertNull(s.arrival)
     }
 
     @Test

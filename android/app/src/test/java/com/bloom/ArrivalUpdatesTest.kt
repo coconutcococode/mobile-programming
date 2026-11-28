@@ -12,15 +12,18 @@ import com.bloom.core.model.Segment
 import com.bloom.core.model.TransitMode
 import com.bloom.core.model.toGuideSteps
 import com.bloom.feature.guide.ArrivalPolling
+import com.bloom.feature.guide.ArrivalTarget
 import com.bloom.feature.guide.GuideBanner
 import com.bloom.feature.guide.arrivalCardText
 import com.bloom.feature.guide.arrivalNotificationLine
 import com.bloom.feature.guide.arrivalTarget
+import com.bloom.feature.guide.arrivalTargets
 import com.bloom.feature.guide.guideBanners
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -60,19 +63,19 @@ class ArrivalUpdatesTest {
         val walking = session(walk, subway, at = GuideStepType.WALK)
         assertNull(arrivalTarget(walking, north(600.0), active = null))
         assertNull(arrivalTarget(walking, here = null, active = null))
-        assertEquals(subway, arrivalTarget(walking, north(450.0), active = null))
-        assertEquals(subway, arrivalTarget(session(walk, subway, at = GuideStepType.WAIT_BOARDING), here = null, active = null))
+        assertEquals(ArrivalTarget(subway, 0), arrivalTarget(walking, north(450.0), active = null))
+        assertEquals(ArrivalTarget(subway, 0), arrivalTarget(session(walk, subway, at = GuideStepType.WAIT_BOARDING), here = null, active = null))
     }
 
     @Test
     fun `한 번 시작하면 500m 언저리에서 위치가 흔들려도 승차 전까지 계속 조회한다`() {
         val walking = session(walk, subway, at = GuideStepType.WALK)
-        assertEquals(subway, arrivalTarget(walking, north(520.0), active = subway))
+        assertEquals(ArrivalTarget(subway, 0), arrivalTarget(walking, north(520.0), active = ArrivalTarget(subway, 0)))
     }
 
     @Test
     fun `차량 이동부터, 그리고 승차가 없는 마지막 도보에서는 조회하지 않는다`() {
-        assertNull(arrivalTarget(session(walk, subway, at = GuideStepType.RIDING), station, active = subway))
+        assertNull(arrivalTarget(session(walk, subway, at = GuideStepType.RIDING), station, active = ArrivalTarget(subway, 0)))
         assertNull(arrivalTarget(session(walk, subway, at = GuideStepType.WAIT_ALIGHTING), station, active = null))
         assertNull(arrivalTarget(session(subway, walk, at = GuideStepType.WALK), station, active = null))
     }
@@ -80,7 +83,7 @@ class ArrivalUpdatesTest {
     // ── 조회 순서와 카드 상태 ─────────────────────
 
     private class Harness(scope: TestScope, private val responses: MutableList<suspend () -> Result<ArrivalInfo>>) {
-        val targets = MutableStateFlow<Segment?>(null)
+        val targets = MutableStateFlow<ArrivalTarget?>(null)
         val online = MutableStateFlow(true)
         val retries = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
         val published = mutableListOf<ArrivalState?>()
@@ -108,7 +111,7 @@ class ArrivalUpdatesTest {
     fun `대상이 생기면 확인 중을 거쳐 값을 보여 주고 30초마다 조회하며, 차량 이동이 되면 카드를 지우고 멈춘다`() = runTest {
         val h = Harness(this, mutableListOf(ok(2), ok(1), ok(0)))
         runCurrent()
-        h.targets.value = subway
+        h.targets.value = ArrivalTarget(subway, 1)
         runCurrent()
         assertEquals(listOf(null, ArrivalState.Loading, ArrivalState.Live(info.copy(firstMinutes = 2))), h.published)
 
@@ -127,7 +130,7 @@ class ArrivalUpdatesTest {
     fun `3초 넘는 응답과 실패는 2번까지 확인 중을 유지하고 3번째에 오류 카드, 이후 성공하면 다시 값을 보여 준다`() = runTest {
         val slow: suspend () -> Result<ArrivalInfo> = { delay(3_500); Result.success(info) }
         val h = Harness(this, mutableListOf(slow, fail, fail, ok()))
-        h.targets.value = subway
+        h.targets.value = ArrivalTarget(subway, 1)
         advanceTimeBy(30_001)
         assertEquals(ArrivalState.Loading, h.current)
         advanceTimeBy(30_000)
@@ -140,7 +143,7 @@ class ArrivalUpdatesTest {
     @Test
     fun `오류 카드에서 다시 시도를 누르면 30초를 기다리지 않고 바로 조회한다`() = runTest {
         val h = Harness(this, mutableListOf(fail, fail, fail, ok()))
-        h.targets.value = subway
+        h.targets.value = ArrivalTarget(subway, 1)
         advanceTimeBy(60_001)
         assertEquals(ArrivalState.Failed(3), h.current)
         advanceTimeBy(5_000)
@@ -153,7 +156,7 @@ class ArrivalUpdatesTest {
     @Test
     fun `미제공 지역이면 카드를 바꾸고 조회를 멈춘다`() = runTest {
         val h = Harness(this, mutableListOf({ Result.success(info.copy(status = ArrivalStatus.UNSUPPORTED_AREA)) }))
-        h.targets.value = bus
+        h.targets.value = ArrivalTarget(bus, 1)
         advanceTimeBy(120_000)
         assertEquals(ArrivalState.Unavailable(ArrivalStatus.UNSUPPORTED_AREA), h.current)
         assertEquals(1, h.callTimes.size)
@@ -162,7 +165,7 @@ class ArrivalUpdatesTest {
     @Test
     fun `연결이 끊기면 마지막 값을 흐리게 두고 받은 지 2분 뒤 숨기며, 연결되면 바로 다시 조회한다`() = runTest {
         val h = Harness(this, mutableListOf(ok(), ok(5)))
-        h.targets.value = subway
+        h.targets.value = ArrivalTarget(subway, 1)
         runCurrent()
         advanceTimeBy(10_000)
         h.online.value = false
@@ -177,6 +180,35 @@ class ArrivalUpdatesTest {
         runCurrent()
         assertEquals(2, h.callTimes.size)
         assertEquals(ArrivalState.Live(info.copy(firstMinutes = 5)), h.current)
+    }
+
+    @Test
+    fun `재탐색으로 안내가 새로 시작되면 승차 구간이 같아도 조회를 처음부터 다시 한다`() = runTest {
+        val h = Harness(this, mutableListOf({ Result.success(info.copy(status = ArrivalStatus.MATCH_FAILED)) }, ok()))
+        h.targets.value = ArrivalTarget(subway, 1)
+        advanceTimeBy(60_000)
+        assertEquals(ArrivalState.Unavailable(ArrivalStatus.MATCH_FAILED), h.current)
+        assertEquals(1, h.callTimes.size)
+
+        // 새 안내는 도착 카드가 비어 있는 채로 시작하므로, 같은 구간이어도 다시 확인 중 → 값을 보여 줘야 한다
+        h.targets.value = ArrivalTarget(subway, 2)
+        runCurrent()
+        assertEquals(2, h.callTimes.size)
+        assertEquals(listOf(ArrivalState.Loading, ArrivalState.Live(info)), h.published.takeLast(2))
+    }
+
+    @Test
+    fun `위치·시간 갱신으로 세션이 바뀌어도 대상은 그대로고, 안내 번호가 바뀌면 새 대상이 된다`() = runTest {
+        val start = session(walk, subway, at = GuideStepType.WAIT_BOARDING).copy(guideId = 1)
+        val sessions = MutableStateFlow<GuideSession?>(start)
+        val targets = mutableListOf<ArrivalTarget?>()
+        backgroundScope.launch { arrivalTargets(sessions, MutableStateFlow(null)).toList(targets) }
+        runCurrent()
+        sessions.value = start.copy(remainingStops = 3, arrival = ArrivalState.Loading) // 평소 갱신
+        runCurrent()
+        sessions.value = start.copy(guideId = 2) // 재탐색
+        runCurrent()
+        assertEquals(listOf(null, ArrivalTarget(subway, 1), ArrivalTarget(subway, 2)), targets)
     }
 
     // ── 화면·알림 글자 ─────────────────────────

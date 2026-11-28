@@ -118,6 +118,7 @@ class InMemoryGuideSessionRepository @Inject constructor(
             remainingStops = e.remainingStops(p, now),
             isAtAlightingStation = e.isAtAlightingStation(p, now),
             locationIntervalMillis = e.locationIntervalMillis(p),
+            guideId = generation,
         )
     }
 }

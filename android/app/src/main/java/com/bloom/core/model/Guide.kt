@@ -64,6 +64,8 @@ data class GuideSession(
     val isAtAlightingStation: Boolean = false,
     /** 위치 서비스가 다음에 쓸 위치 갱신 간격 */
     val locationIntervalMillis: Long = 5_000L,
+    /** 안내를 시작(재탐색 포함)할 때마다 바뀌는 번호. 같은 경로여도 새로 시작한 안내인지 구분한다 */
+    val guideId: Long = 0,
 ) {
     val currentStep: GuideStep get() = steps[currentStepIndex]
     val isLastStep: Boolean get() = currentStepIndex == steps.lastIndex
