@@ -48,4 +48,4 @@ fun SaveFavoriteDialog(
 }
 
 /** 별칭 최대 글자 수(잠정, 팀 확정 전). 즐겨찾기 별칭 수정(S-07-D1)도 같은 값으로 맞춘다. */
-private const val MAX_ALIAS_LENGTH = 20
+internal const val MAX_ALIAS_LENGTH = 20
