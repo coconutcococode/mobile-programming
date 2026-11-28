@@ -46,6 +46,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.bloom.core.designsystem.UiState
+import com.bloom.core.designsystem.toUserMessage
 import com.bloom.core.designsystem.component.BannerTone
 import com.bloom.core.designsystem.component.BloomTopBar
 import com.bloom.core.designsystem.component.EmptyState
@@ -57,6 +58,7 @@ import com.bloom.core.model.Favorite
 import com.bloom.core.model.FavoriteLimits
 import com.bloom.core.model.SyncState
 import com.bloom.core.network.NetworkMonitor
+import com.bloom.core.network.toAppError
 import com.bloom.data.repository.AuthRepository
 import com.bloom.data.repository.FavoriteRepository
 import com.bloom.feature.place.MAX_ALIAS_LENGTH
@@ -71,8 +73,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** 수정, 삭제 실패 안내. [retry] 는 실패한 작업을 다시 실행 */
-data class FavoriteActionError(val message: String, val retry: () -> Unit)
+/** 수정, 삭제 실패 안내. [cause] 는 실패 원인 문구(인터넷 연결 등), [retry] 는 실패한 작업을 다시 실행 */
+data class FavoriteActionError(val message: String, val cause: String, val retry: () -> Unit)
 
 @HiltViewModel
 class FavoritesViewModel internal constructor(
@@ -126,7 +128,7 @@ class FavoritesViewModel internal constructor(
         viewModelScope.launch {
             _actionError.value = null
             favoriteRepository.rename(favorite.id, alias.trim()).onFailure {
-                _actionError.value = FavoriteActionError("별칭을 바꾸지 못했어요") { rename(favorite, alias) }
+                _actionError.value = FavoriteActionError("별칭을 바꾸지 못했어요", it.toAppError().toUserMessage()) { rename(favorite, alias) }
             }
         }
     }
@@ -144,7 +146,7 @@ class FavoritesViewModel internal constructor(
         viewModelScope.launch {
             _actionError.value = null
             favoriteRepository.delete(favorite.id).onFailure {
-                _actionError.value = FavoriteActionError("삭제하지 못했어요") { delete(favorite) }
+                _actionError.value = FavoriteActionError("삭제하지 못했어요", it.toAppError().toUserMessage()) { delete(favorite) }
             }
         }
     }
@@ -211,7 +213,7 @@ fun FavoritesScreen(
                     }
                     actionError?.let { error ->
                         NoticeBanner(
-                            "${error.message}. 다시 시도해 주세요",
+                            "${error.message}. ${error.cause}",
                             tone = BannerTone.Warning,
                             actionLabel = "다시 시도",
                             onAction = error.retry,

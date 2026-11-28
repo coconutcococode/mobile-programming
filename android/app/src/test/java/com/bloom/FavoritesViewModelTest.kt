@@ -21,6 +21,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import java.io.IOException
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -57,7 +58,7 @@ class FavoritesViewModelTest {
         override suspend fun add(place: Place, alias: String): Result<Favorite> = error("사용 안 함")
         override suspend fun rename(favoriteId: String, alias: String): Result<Unit> {
             renamed += favoriteId to alias
-            return if (fail) Result.failure(IllegalStateException()) else Result.success(Unit)
+            return if (fail) Result.failure(IOException("offline")) else Result.success(Unit)
         }
         override suspend fun delete(favoriteId: String): Result<Unit> {
             deleted += favoriteId
@@ -94,6 +95,8 @@ class FavoritesViewModelTest {
         assertEquals(listOf("f1" to "학교 정문"), repo.renamed)
         val error = vm.actionError.value!!
         assertEquals("별칭을 바꾸지 못했어요", error.message)
+        // 실패 원인을 함께 안내(연결 끊김 → 인터넷 연결 필요)
+        assertEquals("인터넷 연결이 필요합니다", error.cause)
 
         repo.fail = false
         error.retry()
