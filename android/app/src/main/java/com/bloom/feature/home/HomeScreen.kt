@@ -92,19 +92,19 @@ fun HomeScreen(
     // 권한 창이 떠 있는 동안 고른 최근 목적지. null 이면 [내 위치 보기]에서 연 권한 창
     // rememberSaveable: 권한 창이 떠 있는 동안 화면이 다시 만들어져도(회전 등) 고른 목적지 유지
     var pendingRecent by rememberSaveable(stateSaver = RecentDestinationSaver) { mutableStateOf<RecentDestination?>(null) }
-    // 권한 창이 [다시 안내]로 열렸는지
-    var pendingResume by rememberSaveable { mutableStateOf(false) }
+    // 권한 창이 떠 있는 동안 [다시 안내]로 고른 목적지. 화면이 다시 만들어져도 목적지 유지
+    var pendingResume by rememberSaveable(stateSaver = ResumeTargetSaver) { mutableStateOf<ResumeTarget?>(null) }
 
     // S-01-D1 위치 권한 요청. 정확한 위치(FINE)를 받아야 안내가 가능(NFR-08) → 대략적 위치만이면 S-08-P1
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         val recent = pendingRecent
         val resume = pendingResume
         pendingRecent = null
-        pendingResume = false
+        pendingResume = null
         when {
             result[Manifest.permission.ACCESS_FINE_LOCATION] != true -> onLocationPermissionDenied()
             recent != null -> onRecentClick(recent)
-            resume -> viewModel.interruptedTarget.value?.let(onResumeInterrupted)
+            resume != null -> onResumeInterrupted(resume)
             else -> viewModel.locate()
         }
     }
@@ -125,7 +125,7 @@ fun HomeScreen(
         if (viewModel.hasLocationPermission()) {
             onResumeInterrupted(target)
         } else {
-            pendingResume = true
+            pendingResume = target
             permissionLauncher.launch(LocationPermissions.REQUIRED)
         }
     }
@@ -284,4 +284,10 @@ private fun SearchBarStub(onClick: () -> Unit) {
 private val RecentDestinationSaver = listSaver<RecentDestination?, String>(
     save = { r -> if (r == null) emptyList() else listOf(r.placeId, r.query) },
     restore = { if (it.size == 2) RecentDestination(it[0], it[1]) else null },
+)
+
+/** [ResumeTarget] 저장용. 검색어가 없으면 빈 문자열로 저장하고 복원 시 null */
+private val ResumeTargetSaver = listSaver<ResumeTarget?, String>(
+    save = { t -> if (t == null) emptyList() else listOf(t.placeId, t.name, t.searchQuery.orEmpty()) },
+    restore = { if (it.size == 3) ResumeTarget(it[0], it[1], it[2].ifEmpty { null }) else null },
 )
