@@ -85,26 +85,26 @@ fun HomeScreen(
     val myLocation by viewModel.myLocation.collectAsStateWithLifecycle()
     val locating by viewModel.locating.collectAsStateWithLifecycle()
     val saveMessage by viewModel.saveMessage.collectAsStateWithLifecycle()
-    val interruptedPlaceId by viewModel.interruptedPlaceId.collectAsStateWithLifecycle()
+    val interruptedTarget by viewModel.interruptedTarget.collectAsStateWithLifecycle()
     val savingPlace by viewModel.savingPlace.collectAsStateWithLifecycle()
     val recenterRequest by viewModel.recenterRequest.collectAsStateWithLifecycle()
     val recents by viewModel.recents.collectAsStateWithLifecycle()
     // 권한 창이 떠 있는 동안 고른 최근 목적지. null 이면 [내 위치 보기]에서 연 권한 창
     // rememberSaveable: 권한 창이 떠 있는 동안 화면이 다시 만들어져도(회전 등) 고른 목적지 유지
     var pendingRecent by rememberSaveable(stateSaver = RecentDestinationSaver) { mutableStateOf<RecentDestination?>(null) }
-    // 권한 창이 떠 있는 동안 [다시 안내]를 누른 목적지 장소 ID
-    var pendingResumeId by rememberSaveable { mutableStateOf<String?>(null) }
+    // 권한 창이 [다시 안내]로 열렸는지
+    var pendingResume by rememberSaveable { mutableStateOf(false) }
 
     // S-01-D1 위치 권한 요청. 정확한 위치(FINE)를 받아야 안내가 가능(NFR-08) → 대략적 위치만이면 S-08-P1
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         val recent = pendingRecent
-        val resumeId = pendingResumeId
+        val resume = pendingResume
         pendingRecent = null
-        pendingResumeId = null
+        pendingResume = false
         when {
             result[Manifest.permission.ACCESS_FINE_LOCATION] != true -> onLocationPermissionDenied()
             recent != null -> onRecentClick(recent)
-            resumeId != null -> onResumeInterrupted(viewModel.resumeInterrupted(resumeId))
+            resume -> viewModel.interruptedTarget.value?.let(onResumeInterrupted)
             else -> viewModel.locate()
         }
     }
@@ -121,11 +121,11 @@ fun HomeScreen(
     }
 
     // S-01-B2 [다시 안내]: 위치 권한 확인 후 같은 목적지로 S-02 (최근 목적지와 같은 순서)
-    val resumeInterrupted: (String) -> Unit = { placeId ->
+    val resumeInterrupted: (ResumeTarget) -> Unit = { target ->
         if (viewModel.hasLocationPermission()) {
-            onResumeInterrupted(viewModel.resumeInterrupted(placeId))
+            onResumeInterrupted(target)
         } else {
-            pendingResumeId = placeId
+            pendingResume = true
             permissionLauncher.launch(LocationPermissions.REQUIRED)
         }
     }
@@ -184,11 +184,12 @@ fun HomeScreen(
                     )
                 }
                 // S-01-B2 이전 안내 중단(강제 종료 후 재실행). 경고가 아닌 안내라 기본 색
-                interruptedPlaceId?.let { placeId ->
+                interruptedTarget?.let { target ->
                     NoticeBanner(
                         message = "이전 안내가 중단되었습니다",
                         actionLabel = "다시 안내",
-                        onAction = { resumeInterrupted(placeId) },
+                        onAction = { resumeInterrupted(target) },
+                        onDismiss = viewModel::dismissInterrupted,
                     )
                 }
             }

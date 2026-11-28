@@ -14,9 +14,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -133,6 +135,8 @@ fun NoticeBanner(
     tone: BannerTone = BannerTone.Info,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
+    // 값이 있으면 오른쪽 끝에 닫기(X) 버튼 표시
+    onDismiss: (() -> Unit)? = null,
 ) {
     val isWarning = tone == BannerTone.Warning
     Row(
@@ -161,5 +165,11 @@ fun NoticeBanner(
             modifier = Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 10.dp),
         )
         if (actionLabel != null && onAction != null) BloomTextButton(actionLabel, onAction)
+        if (onDismiss != null) {
+            // IconButton 기본 터치 영역 48dp
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Filled.Close, contentDescription = "닫기", modifier = Modifier.size(20.dp))
+            }
+        }
     }
 }

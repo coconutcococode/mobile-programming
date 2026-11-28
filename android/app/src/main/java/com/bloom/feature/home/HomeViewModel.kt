@@ -55,15 +55,22 @@ class HomeViewModel @Inject constructor(
     val recents: StateFlow<List<RecentDestination>> = recentDestinationRepository.observe()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** S-01-B2 이전 안내 중단: 기록이 있고 진행 중인 안내가 없을 때만 목적지 장소 ID. 앱 실행 직후 기기에서 읽어 1초 안에 표시 */
-    val interruptedPlaceId: StateFlow<String?> =
-        combine(settingsDataStore.interruptedGuidePlaceId, guideSession) { placeId, session -> placeId.takeIf { session == null } }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    /**
+     * S-01-B2 이전 안내 중단: 기록이 있고 진행 중인 안내가 없을 때만 [다시 안내] 목적지. 앱 실행 직후 기기에서 읽어 1초 안에 표시.
+     * 최근 목적지, 즐겨찾기를 처음 읽은 뒤에 계산해서 목록을 읽기 전에 눌러도 검색어가 빠지지 않음
+     */
+    val interruptedTarget: StateFlow<ResumeTarget?> = combine(
+        settingsDataStore.interruptedGuidePlaceId,
+        guideSession,
+        recentDestinationRepository.observe(),
+        favoriteRepository.observeFavorites(),
+    ) { placeId, session, recents, favorites ->
+        placeId?.takeIf { session == null }?.let { resumeTargetOf(it, recents, favorites) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    /** [다시 안내]: 같은 목적지로 S-02 를 열 값 계산, 배너 기록은 바로 삭제 */
-    fun resumeInterrupted(placeId: String): ResumeTarget {
+    /** 배너 닫기: 기록 삭제. [다시 안내]는 기록을 지우지 않음(경로 후보에서 돌아와도 배너 유지, 새 안내가 끝나면 삭제) */
+    fun dismissInterrupted() {
         viewModelScope.launch { settingsDataStore.setInterruptedGuide(null) }
-        return resumeTargetOf(placeId, recents.value, favorites.value)
     }
 
     /** S-01-5 오프라인: 지도 대신 안내, 즐겨찾기 목록은 그대로 */
