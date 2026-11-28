@@ -4,7 +4,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -192,60 +191,64 @@ fun GuideScreen(
             Modifier.fillMaxSize().padding(padding).padding(horizontal = BloomDimens.ScreenHorizontal),
             verticalArrangement = Arrangement.spacedBy(BloomDimens.CardGap),
         ) {
-            guideBanners(current, notificationsEnabled, isOnline).forEach { banner ->
-                NoticeBanner(
-                    message = banner.message,
-                    tone = BannerTone.Warning, // 색만이 아니라 ⚠ 아이콘·문구로도 알린다
-                    actionLabel = banner.actionLabel,
-                    onAction = {
-                        when (banner) {
-                            GuideBanner.OFF_ROUTE -> viewModel.reroute()
-                            GuideBanner.LOCATION_INACCURATE -> viewModel.next()
-                            GuideBanner.NOTIFICATIONS_OFF -> GuideSystemSettings.openAppNotificationSettings(context)
-                            GuideBanner.OFFLINE -> Unit
-                        }
-                    },
-                )
-            }
-            Text(
-                "도착 예정 ${current.route.arrivalTime} · ${current.currentStepIndex + 1} / ${current.steps.size}단계",
-                style = MaterialTheme.typography.bodySmall,
-                color = BloomTheme.colors.textSecondary,
-            )
-            StepTrack(current, onStepClick = viewModel::moveToStep)
-
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(BloomDimens.CardRadius),
-                modifier = Modifier.fillMaxWidth(),
+            // 위쪽 정보(배너·단계·도착 카드)만 스크롤. 아래 버튼은 이 영역 밖에 두어 화면이 작거나 글자가 커도 항상 보이게 한다
+            Column(
+                Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(BloomDimens.CardGap),
             ) {
-                Column(Modifier.padding(16.dp)) {
-                    Text(
-                        "현재 단계 · ${stepTypeLabel(current.currentStep.type)}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = BloomTheme.colors.textSecondary,
+                guideBanners(current, notificationsEnabled, isOnline).forEach { banner ->
+                    NoticeBanner(
+                        message = banner.message,
+                        tone = BannerTone.Warning, // 색만이 아니라 ⚠ 아이콘·문구로도 알린다
+                        actionLabel = banner.actionLabel,
+                        onAction = {
+                            when (banner) {
+                                GuideBanner.OFF_ROUTE -> viewModel.reroute()
+                                GuideBanner.LOCATION_INACCURATE -> viewModel.next()
+                                GuideBanner.NOTIFICATIONS_OFF -> GuideSystemSettings.openAppNotificationSettings(context)
+                                GuideBanner.OFFLINE -> Unit
+                            }
+                        },
                     )
-                    Text(current.currentStep.title, style = MaterialTheme.typography.headlineSmall)
-                    Text(GuideNotification.statusText(current), style = MaterialTheme.typography.bodyMedium)
+                }
+                Text(
+                    "도착 예정 ${current.route.arrivalTime} · ${current.currentStepIndex + 1} / ${current.steps.size}단계",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = BloomTheme.colors.textSecondary,
+                )
+                StepTrack(current, onStepClick = viewModel::moveToStep)
+
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(BloomDimens.CardRadius),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(
+                            "현재 단계 · ${stepTypeLabel(current.currentStep.type)}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = BloomTheme.colors.textSecondary,
+                        )
+                        Text(current.currentStep.title, style = MaterialTheme.typography.headlineSmall)
+                        Text(GuideNotification.statusText(current), style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                current.arrival?.let { arrival ->
+                    ArrivalCard(arrivalCardText(arrival, upcomingBoarding(current)?.mode), onRetry = viewModel::retryArrival)
+                }
+
+                if (canCorrectStation(current)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "표시된 역이 실제와 다른가요?",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = BloomTheme.colors.textSecondary,
+                            modifier = Modifier.weight(1f),
+                        )
+                        BloomTextButton("현재 역 고치기", onClick = { showStationDialog = true })
+                    }
                 }
             }
-            current.arrival?.let { arrival ->
-                ArrivalCard(arrivalCardText(arrival, upcomingBoarding(current)?.mode), onRetry = viewModel::retryArrival)
-            }
-
-            if (canCorrectStation(current)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "표시된 역이 실제와 다른가요?",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = BloomTheme.colors.textSecondary,
-                        modifier = Modifier.weight(1f),
-                    )
-                    BloomTextButton("현재 역 고치기", onClick = { showStationDialog = true })
-                }
-            }
-
-            Spacer(Modifier.weight(1f))
 
             val action = primaryAction(current)
             primaryHint(current)?.let {
