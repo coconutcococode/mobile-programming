@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
@@ -54,6 +55,16 @@ class SettingsDataStore @Inject constructor(
 
     suspend fun setLockScreenNoticeShown() = write { it[Keys.LOCK_SCREEN_NOTICE_SHOWN] = true }
 
+    /** S-01-B2 안내 중 강제 종료로 남은 목적지 장소 ID(없으면 null). 경로는 저장하지 않음, 읽기 실패면 기록 없음으로 처리 */
+    val interruptedGuidePlaceId: Flow<String?> = store.data
+        .catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }
+        .map { it[Keys.INTERRUPTED_GUIDE_PLACE_ID] }
+
+    /** null 이면 기록 삭제 */
+    suspend fun setInterruptedGuide(placeId: String?) = write {
+        if (placeId == null) it.remove(Keys.INTERRUPTED_GUIDE_PLACE_ID) else it[Keys.INTERRUPTED_GUIDE_PLACE_ID] = placeId
+    }
+
     suspend fun setDarkMode(enabled: Boolean) = write { it[Keys.DARK_MODE] = enabled }
 
     suspend fun setAlightVibration(enabled: Boolean) = write { it[Keys.ALIGHT_VIBRATION] = enabled }
@@ -77,5 +88,6 @@ class SettingsDataStore @Inject constructor(
         val DARK_MODE = booleanPreferencesKey("dark_mode")
         val ALIGHT_VIBRATION = booleanPreferencesKey("alight_vibration")
         val LOCK_SCREEN_NOTICE_SHOWN = booleanPreferencesKey("lock_screen_notice_shown")
+        val INTERRUPTED_GUIDE_PLACE_ID = stringPreferencesKey("interrupted_guide_place_id")
     }
 }

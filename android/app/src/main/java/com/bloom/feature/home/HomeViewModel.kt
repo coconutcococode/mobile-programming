@@ -2,6 +2,7 @@ package com.bloom.feature.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.bloom.core.datastore.SettingsDataStore
 import com.bloom.core.designsystem.UiState
 import com.bloom.core.location.LocationTracker
 import com.bloom.core.model.Favorite
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -36,6 +38,7 @@ class HomeViewModel @Inject constructor(
     authRepository: AuthRepository,
     guideSessionRepository: GuideSessionRepository,
     networkMonitor: NetworkMonitor,
+    private val settingsDataStore: SettingsDataStore,
 ) : ViewModel() {
 
     /** S-01-B1 '안내 중' 배너 */
@@ -51,6 +54,17 @@ class HomeViewModel @Inject constructor(
     /** 시트의 최근 목적지(최신순, 최대 20개). 장소 ID와 사용자가 입력한 검색어만 있다 */
     val recents: StateFlow<List<RecentDestination>> = recentDestinationRepository.observe()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** S-01-B2 이전 안내 중단: 기록이 있고 진행 중인 안내가 없을 때만 목적지 장소 ID. 앱 실행 직후 기기에서 읽어 1초 안에 표시 */
+    val interruptedPlaceId: StateFlow<String?> =
+        combine(settingsDataStore.interruptedGuidePlaceId, guideSession) { placeId, session -> placeId.takeIf { session == null } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** [다시 안내]: 같은 목적지로 S-02 를 열 값 계산, 배너 기록은 바로 삭제 */
+    fun resumeInterrupted(placeId: String): ResumeTarget {
+        viewModelScope.launch { settingsDataStore.setInterruptedGuide(null) }
+        return resumeTargetOf(placeId, recents.value, favorites.value)
+    }
 
     /** S-01-5 오프라인: 지도 대신 안내, 즐겨찾기 목록은 그대로 */
     val isOnline: StateFlow<Boolean> = networkMonitor.isOnline
